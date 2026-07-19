@@ -1,0 +1,282 @@
+Games and AI Techniques
+Kinematics - Steering Behaviors
+What is AI?
+• How would you define AI? 
+RMIT University©
+Thinking Humanly 
+Thinking Rationally 
+"The exciting new effort to make comput- 
+"The study of mental faculties through the 
+ers think ... machines with minds, in the 
+use of computational models." 
+full and literal sense." (Haugeland, 1985) 
+(Charniak and McDermott, 1985) 
+"[The automation of] activities that we 
+"The study of the computations that make 
+associate with human thinking, activities 
+it possible to perceive, reason, and act." 
+such as decision-making, problem solv- 
+ing, learning .. ." (Hellman, 1978) 
+(Winston, 1992) 
+Acting Humanly 
+Acting Rationally 
+"The art of creating machines that per- 
+"Computational Intelligence is the study 
+form functions that require intelligence 
+of the design of intelligent agents." (Poole 
+when performed by people." (Kurzweil, 
+et at, 1998) 
+1990) 
+"The study of how to make computers do 
+"Al ... is concerned with intelligent be- 
+things at which, at the moment, people are 
+better." (Rich and Knight, 1991) 
+havior in artifacts." (Nilsson, 1998) 
+Figure 1.1 
+Some definitions of artificial intelligence, organized into four categories. 
+Steering Behaviors For 
+Autonomous Characters
+Craig W. Reynolds & AI4G Ian Millington and John Funge
+Outline
+• Introduction
+• Simple Vehicle Model
+• The Physics of The Model
+• Steering behaviors
+– One or two characters behaviors
+– Group behaviors
+• Combining Behaviors
+• Conclusion
+RMIT University©
+Introduction
+• To navigate autonomous characters around 
+their world in a life-like and improvisational 
+manner in animation and games 
+• Hierarchy of motion behaviors 
+RMIT University©
+Movement
+• Movement calculation often needs to interact 
+• with the “Physics” engine
+– Avoid characters walking through each other or through 
+obstacles
+• Traditional: kinematic movement (not dynamic)
+– Characters simply move (often at fixed speed) without  
+regard to how physical objects accelerate or brake
+• Newer approach: 
+– Steering behaviors or dynamic movement (Craig Reynolds) 
+– Characters accelerate and turn based on physics
+– Seek, flee, flocking
+RMIT University©
+Simple Vehicle Model 
+• Simple Vehicle Model: 
+– mass
+scalar
+– position
+vector
+– velocity
+vector
+– max_force
+scalar
+– max_speed
+scalar
+– orientation
+N basis vectors
+RMIT University©
+Orientation Basics
+RMIT University©
+Orientation Vector vs Scalar
+RMIT University©
+RMIT University©
+Steering Behaviors
+RMIT University©
+Basic Update Function
+RMIT University©
+Time  vs Frame
+Good idea to modulo this. Why? By what?
+Update orientation
+RMIT University©
+Constraint
+•
+Because of its assumption of velocity 
+alignment, this simple vehicle model cannot 
+simulate effects such as skids, spins or slides. 
+•
+Furthermore this model allows the vehicle to 
+turn when its speed is zero.
+RMIT University©
+Kinematic Seek
+RMIT University©
+Overshooting
+RMIT University©
+Dynamic Seek
+RMIT University©
+No rotation but can 
+change this if needed as before
+Seek and Flee
+•
+http://www.red3d.com/cwr/steer/SeekFlee.html
+•
+Seek (or pursuit of a static target)
+–
+desired_velocity = normalize (position - target) * max_speed
+steering = desired_velocity – velocity
+•
+Flee is simply the inverse of seek.
+–
+steering = velocity - desired_velocity
+RMIT University©
+Arrival
+•
+http://www.red3d.com/cwr/steer/Arrival.html
+•
+target_offset = target – position
+distance = length (target_offset)
+ramped_speed = max_speed * (distance / slowing_distance)
+clipped_speed = minimum (ramped_speed, max_speed)
+desired_velocity = (clipped_speed / distance) * target_offset
+steering = desired_velocity - velocity
+RMIT University©
+slowing_distance:
+The distance at which 
+slowing begins.
+slowing_distance
+distance
+Overshooting (orbit)
+RMIT University©
+Facing
+RMIT University©
+Pursuit and Evasion
+•
+http://www.red3d.com/cwr/steer/PursueEvade.html
+•
+Pursuit is similar to seek except that the quarry (target) is another moving character.
+–
+Assume the quarry will not turn during the prediction interval T. 
+–
+Future position can be obtained by scaling its velocity by T and adding that offset to its current position.
+RMIT University©
+Offset Pursuit
+•
+Steering a path which passes near, but not directly into a 
+moving target.
+•
+Localize the predicted target location (character’s local 
+coordinate space) project the local target onto the 
+character’s side-up plane, normalize that lateral offset, 
+scale it by -R, add it to the local target point, and globalize
+that value.
+•
+Use seek behavior to approach that offset point.
+RMIT University©
+Target point
+Offset point
+Obstacle Avoidance
+•
+http://www.red3d.com/cwr/steer/Obstacle.html
+•
+The goal of the behavior is to keep an imaginary cylinder of free space in front of the character.
+RMIT University©
+The value returned from obstacle 
+avoidance 
+(a) the steering value to avoid the 
+most threatening obstacle
+(b) if no collision is imminent, a 
+special value (a null value, or 
+the zero vector) to indicate that 
+no corrective steering is 
+required at this moment. 
+Wander
+•
+http://www.red3d.com/cwr/steer/Wander.html
+•
+The steering direction is represented by a red vector.
+•
+The big circle in figure constraint the steering.
+•
+The small circle constraint the random offset of the steering.
+RMIT University©
+Path following
+•
+http://www.red3d.com/cwr/steer/PathFollow.html
+•
+To move a character along the path while staying within the specified radius of the spine.
+•
+Projection distance is less than the path radiusno corrective steering is required.
+•
+Otherwise, Seeking towards the on-path projection of the predicted future position.
+RMIT University©
+Projection distance
+from the predicted position to 
+the nearest on-path point.
+predicted position
+Wall Following and Containment
+•
+http://www.red3d.com/cwr/steer/Wall.html
+•
+http://www.red3d.com/cwr/steer/Containment.html
+•
+Wall following can be implement by offset pursuit.
+•
+Containment can be accomplished by using seek with an inside point of the container.
+RMIT University©
+Flow Field Following
+•
+http://www.red3d.com/cwr/steer/FlowFollow.html
+•
+The future position of a character is estimated and the flow field is sampled at that location. This flow 
+direction (vector F) is the “desired velocity” and the steering direction (vector S) is simply the difference 
+between the current velocity (vector V) and the desired velocity.
+RMIT University©
+Unaligned Collision Avoidance 
+•
+The character steers to avoid the site of the predicted collision.
+•
+If all nearby characters are aligned, a less complicated strategy can be used, see separation
+below. 
+RMIT University©
+Group Behavior
+•
+Separation, cohesion, and alignment, relate to groups of characters.
+•
+the steering behavior determines how a character reacts to other characters in its local 
+neighborhood. 
+RMIT University©
+Repulsive force is computed by subtracting the 
+positions of our character and the nearby character
+Average velocity is 
+the “desired velocity”
+Neighborhood
+• Local neighborhood of characters
+– the neighborhood is specified by a distance which 
+defines when two characters are “nearby”, and an 
+angle which defines the character’s perceptual 
+“field of view.” 
+RMIT University©
+Leader Following
+•
+http://www.red3d.com/cwr/steer/LeaderFollow.html
+•
+If a follower finds itself in a rectangular region in front of the leader, it will steer laterally away from the 
+leader’s path.
+•
+Otherwise, the arrival target is a point offset slightly behind the leader.
+•
+the followers use separation behavior to prevent crowding each other.
+RMIT University©
+Combining Behaviors
+•
+Combining behaviors can happen in two ways:
+–
+Switch
+–
+Blending
+•
+The most straightforward is simply to compute each of the component steering behaviors 
+and sum them together, possibly with a weighting factor for each of them. 
+RMIT University©
+Combining Behaviors Demo
+• Crowd Path Following
+• Leader Following
+• Unaligned Collision Avoidance
+• Queuing (at a doorway) 
+• Flocking (combining: separation, alignment, cohesion)
+RMIT University©
