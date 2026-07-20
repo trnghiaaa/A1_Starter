@@ -142,32 +142,35 @@ def seek_with_avoid(pos, vel, target, max_speed, radius, rects, lookahead=AVOID_
     if d.length_squared() == 0:
         return V2()
     direction = d.normalize()
-    reach = min(lookahead, d.length())
-    end_point = pos + direction * reach
+    base_reach = min(lookahead, d.length())
 
-    # Base the avoidance scan on the current velocity heading if moving,
-    # otherwise fall back to target direction.
-    if vel.length_squared() > 1e-3:
-        heading = vel.normalize()
-    else:
-        heading = direction
+    # Try different lookahead lengths (base, half, and a very short 42px corridor)
+    # to find any escape routes in tight gaps/corners.
+    for reach in [base_reach, base_reach * 0.5, 42.0]:
+        end_point = pos + direction * reach
+        
+        if vel.length_squared() > 1e-3:
+            heading = vel.normalize()
+        else:
+            heading = direction
 
-    # Step 1: check straight corridor to target
-    if not circlecast_hits_any_rect(pos, end_point, radius, rects):
-        return seek(pos, vel, target, max_speed)
+        # Step 1: check straight corridor to target
+        if not circlecast_hits_any_rect(pos, end_point, radius, rects):
+            return seek(pos, vel, target, max_speed)
 
-    # Step 2-3: try angled corridors relative to current heading, alternating right and left
-    for angle in range(AVOID_ANGLE_INCREMENT, AVOID_MAX_ANGLE + 1, AVOID_ANGLE_INCREMENT):
-        # Clockwise
-        rot_r = heading.rotate(angle)
-        end_r = pos + rot_r * reach
-        if not circlecast_hits_any_rect(pos, end_r, radius, rects, ignore_start=True):
-            return seek(pos, vel, end_r, max_speed)
-        # Counter-clockwise
-        rot_l = heading.rotate(-angle)
-        end_l = pos + rot_l * reach
-        if not circlecast_hits_any_rect(pos, end_l, radius, rects, ignore_start=True):
-            return seek(pos, vel, end_l, max_speed)
+        # Step 2-3: try angled corridors relative to current heading up to 96 degrees
+        max_scan_angle = 96
+        for angle in range(AVOID_ANGLE_INCREMENT, max_scan_angle + 1, AVOID_ANGLE_INCREMENT):
+            # Clockwise
+            rot_r = heading.rotate(angle)
+            end_r = pos + rot_r * reach
+            if not circlecast_hits_any_rect(pos, end_r, radius, rects, ignore_start=True):
+                return seek(pos, vel, end_r, max_speed)
+            # Counter-clockwise
+            rot_l = heading.rotate(-angle)
+            end_l = pos + rot_l * reach
+            if not circlecast_hits_any_rect(pos, end_l, radius, rects, ignore_start=True):
+                return seek(pos, vel, end_l, max_speed)
 
     # Step 4: all corridors blocked, gentle brake
     return -vel * 0.5

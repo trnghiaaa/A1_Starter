@@ -69,8 +69,30 @@ def segment_circlecast_hits_rect(p0, p1, radius, rect, step=6.0, ignore_start=Fa
             return True
     return False
 
+def circle_outside_bounds(center, radius):
+    """Return True if a circle with the given center and radius goes outside the screen."""
+    return (center.x - radius < 0 or 
+            center.x + radius > WIDTH or 
+            center.y - radius < 0 or 
+            center.y + radius > HEIGHT)
+
 def circlecast_hits_any_rect(p0, p1, radius, rects, step=6.0, ignore_start=False):
-    """Return True if the swept circle between p0 and p1 hits any rect in the list."""
+    """Return True if the swept circle between p0 and p1 hits any rect in the list or the screen bounds."""
+    # Check if the corridor goes outside the screen boundaries
+    d = p1 - p0
+    length = d.length()
+    if length == 0:
+        if circle_outside_bounds(p0, radius):
+            return True
+    else:
+        n = max(1, int(length / step))
+        start_idx = 1 if ignore_start else 0
+        for i in range(start_idx, n + 1):
+            pos = p0 + d * (i / n)
+            if circle_outside_bounds(pos, radius):
+                return True
+
+    # Check rectangular obstacles
     for r in rects:
         if segment_circlecast_hits_rect(p0, p1, radius, r, step, ignore_start):
             return True

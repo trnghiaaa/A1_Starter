@@ -119,11 +119,19 @@ def main():
             # This logic is left as a student task to connect FSMs and mechanics.
             for s in snakes:
                 for b in frog.bubbles:
-                    if (b.pos - s.pos).length_squared() <= (BUBBLE_RADIUS + s.radius) ** 2:
+                    if b.alive and (b.pos - s.pos).length_squared() <= (BUBBLE_RADIUS + s.radius) ** 2:
                         if s.state == SnakeState.Aggro:
                             s.set_state(SnakeState.Harmless)
-                        # optional: on going harmless to home, then Confused for a short time
                         b.alive = False
+
+            # Check bubble collisions with static obstacles (boxes)
+            from utils import circle_rect_intersect
+            for b in frog.bubbles:
+                if b.alive:
+                    for r in world.obstacles:
+                        if circle_rect_intersect(b.pos, BUBBLE_RADIUS, r):
+                            b.alive = False
+                            break
 
             # ------------- Damage logic -------------
             # Only Aggro snakes should damage the frog.

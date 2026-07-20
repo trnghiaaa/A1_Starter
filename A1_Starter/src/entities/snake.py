@@ -48,6 +48,53 @@ class Snake:
         # Obstacles for avoidance
         self.rects = rects
 
+        # Adjust home and patrol_point if they happen to spawn inside any obstacle
+        from utils import nearest_point_on_rect
+        for r in self.rects:
+            # Adjust home
+            if r.collidepoint(self.home):
+                np = nearest_point_on_rect(self.home, r)
+                diff = self.home - np
+                if diff.length_squared() > 0:
+                    self.home += diff.normalize() * (self.radius + 15)
+                else:
+                    d_left = self.home.x - r.left
+                    d_right = r.right - self.home.x
+                    d_top = self.home.y - r.top
+                    d_bottom = r.bottom - self.home.y
+                    min_d = min(d_left, d_right, d_top, d_bottom)
+                    if min_d == d_left:
+                        self.home.x = r.left - (self.radius + 15)
+                    elif min_d == d_right:
+                        self.home.x = r.right + (self.radius + 15)
+                    elif min_d == d_top:
+                        self.home.y = r.top - (self.radius + 15)
+                    else:
+                        self.home.y = r.bottom + (self.radius + 15)
+                # Sync pos with the updated home
+                self.pos = V2(self.home)
+
+            # Adjust patrol_point
+            if r.collidepoint(self.patrol_point):
+                np = nearest_point_on_rect(self.patrol_point, r)
+                diff = self.patrol_point - np
+                if diff.length_squared() > 0:
+                    self.patrol_point += diff.normalize() * (self.radius + 15)
+                else:
+                    d_left = self.patrol_point.x - r.left
+                    d_right = r.right - self.patrol_point.x
+                    d_top = self.patrol_point.y - r.top
+                    d_bottom = r.bottom - self.patrol_point.y
+                    min_d = min(d_left, d_right, d_top, d_bottom)
+                    if min_d == d_left:
+                        self.patrol_point.x = r.left - (self.radius + 15)
+                    elif min_d == d_right:
+                        self.patrol_point.x = r.right + (self.radius + 15)
+                    elif min_d == d_top:
+                        self.patrol_point.y = r.top - (self.radius + 15)
+                    else:
+                        self.patrol_point.y = r.bottom + (self.radius + 15)
+
         # Drawing hint for head direction
         self.heading_deg = 0.0
 
@@ -96,8 +143,11 @@ class Snake:
         # ---------------- State behaviours ----------------
         if self.state == SnakeState.Aggro:
             self.color = (255, 150, 150)
-            target = frog.pos
-            base_steer = pursue(self.pos, self.vel, frog.pos, frog.vel, self.speed)
+            # Calculate predicted future target for pursue
+            d = frog.pos - self.pos
+            time_horizon = d.length() / (self.speed + 1e-5)
+            target = frog.pos + frog.vel * time_horizon
+            base_steer = seek(self.pos, self.vel, target, self.speed)
         elif self.state == SnakeState.PatrolAway:
             self.color = (180, 200, 255)
             target = self.patrol_point
@@ -117,16 +167,17 @@ class Snake:
         else:  # Confused
             self.color = (245, 210, 160)
             target = None
-            steer = wander_force(self.vel, rng_seed=self._rng_seed)
+            # Use larger jitter and zero circle distance for an erratic, "confused" zig-zag walk
+            steer = wander_force(self.vel, jitter_deg=45.0, circle_distance=0.0, circle_radius=50.0, rng_seed=self._rng_seed)
 
         if target is not None:
             # Check if straight corridor to the target is blocked
             d = target - self.pos
-            reach = min(AVOID_LOOKAHEAD, d.length())
+            reach = min(AVOID_LOOKAHEAD * 1.8, d.length())
             end_point = self.pos + d.normalize() * reach if d.length_squared() > 0 else self.pos
-            if circlecast_hits_any_rect(self.pos, end_point, self.radius, self.rects):
-                # Corridor is blocked: use 100% of the seek_with_avoid steering force
-                steer = seek_with_avoid(self.pos, self.vel, target, self.speed, self.radius, self.rects)
+            if circlecast_hits_any_rect(self.pos, end_point, self.radius * 1.1, self.rects):
+                # Corridor is blocked: use 100% of the seek_with_avoid steering force with a safety buffer
+                steer = seek_with_avoid(self.pos, self.vel, target, self.speed, self.radius * 1.1, self.rects)
             else:
                 # Corridor is clear: use the state's natural base steer (arrive or pursue)
                 steer = base_steer
