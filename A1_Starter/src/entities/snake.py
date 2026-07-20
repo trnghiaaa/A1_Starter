@@ -17,8 +17,10 @@ import pygame
 from pygame.math import Vector2 as V2
 from settings import (
     WIDTH, HEIGHT, WHITE,
-    SNAKE_RADIUS, SNAKE_SPEED, AGGRO_RANGE, DEAGGRO_RANGE
+    SNAKE_RADIUS, SNAKE_SPEED, AGGRO_RANGE, DEAGGRO_RANGE,
+    AVOID_LOOKAHEAD
 )
+from utils import circlecast_hits_any_rect
 from steering import arrive, seek, seek_with_avoid, integrate_velocity, pursue, wander_force
 
 class SnakeState(Enum):
@@ -94,40 +96,75 @@ class Snake:
         # ---------------- State behaviours ----------------
         if self.state == SnakeState.Aggro:
             self.color = (255, 150, 150)
-            # TODO: replace seek with pursue for smarter interception
-            # steer = pursue(self.pos, self.vel, frog.pos, frog.vel, self.speed)
-            steer = seek(self.pos, self.vel, frog.pos, self.speed)
-            # Light avoidance to reduce obstacle collisions while aggro
-            steer += seek_with_avoid(self.pos, self.vel, frog.pos, self.speed, self.radius, self.rects) * 0.25
-
+            target = frog.pos
+            base_steer = pursue(self.pos, self.vel, frog.pos, frog.vel, self.speed)
         elif self.state == SnakeState.PatrolAway:
             self.color = (180, 200, 255)
-            steer = arrive(self.pos, self.vel, self.patrol_point, self.speed)
+            target = self.patrol_point
+            base_steer = arrive(self.pos, self.vel, self.patrol_point, self.speed)
             if (self.patrol_point - self.pos).length() < 10:
                 self.set_state(SnakeState.PatrolHome)
-            steer += seek_with_avoid(self.pos, self.vel, self.patrol_point, self.speed, self.radius, self.rects) * 0.25
-
         elif self.state == SnakeState.PatrolHome:
             self.color = (180, 220, 180)
-            steer = arrive(self.pos, self.vel, self.home, self.speed)
+            target = self.home
+            base_steer = arrive(self.pos, self.vel, self.home, self.speed)
             if (self.home - self.pos).length() < 10:
                 self.set_state(SnakeState.PatrolAway)
-            steer += seek_with_avoid(self.pos, self.vel, self.home, self.speed, self.radius, self.rects) * 0.25
-
         elif self.state == SnakeState.Harmless:
             self.color = (190, 180, 255)
-            steer = arrive(self.pos, self.vel, self.home, self.speed * 0.9)
-            steer += seek_with_avoid(self.pos, self.vel, self.home, self.speed, self.radius, self.rects) * 0.25
-
+            target = self.home
+            base_steer = arrive(self.pos, self.vel, self.home, self.speed * 0.9)
         else:  # Confused
             self.color = (245, 210, 160)
-            # TODO: use wander_force for a gentle random walk during confusion
-            # steer = wander_force(self.vel, rng_seed=self._rng_seed)
-            steer = V2()
+            target = None
+            steer = wander_force(self.vel, rng_seed=self._rng_seed)
+
+        if target is not None:
+            # Check if straight corridor to the target is blocked
+            d = target - self.pos
+            reach = min(AVOID_LOOKAHEAD, d.length())
+            end_point = self.pos + d.normalize() * reach if d.length_squared() > 0 else self.pos
+            if circlecast_hits_any_rect(self.pos, end_point, self.radius, self.rects):
+                # Corridor is blocked: use 100% of the seek_with_avoid steering force
+                steer = seek_with_avoid(self.pos, self.vel, target, self.speed, self.radius, self.rects)
+            else:
+                # Corridor is clear: use the state's natural base steer (arrive or pursue)
+                steer = base_steer
 
         # Integrate velocity and update position
         self.vel = integrate_velocity(self.vel, steer, dt, self.speed)
         self.pos += self.vel * dt
+
+        # Resolve collisions with static obstacles (pop out instantly)
+        from utils import nearest_point_on_rect
+        for r in self.rects:
+            np = nearest_point_on_rect(self.pos, r)
+            diff = self.pos - np
+            dist = diff.length()
+            if dist < self.radius:
+                if dist > 0:
+                    overlap = self.radius - dist
+                    self.pos += diff.normalize() * overlap
+                    # Zero out velocity component pointing into the obstacle
+                    normal = diff.normalize()
+                    if self.vel.dot(normal) < 0:
+                        self.vel -= self.vel.dot(normal) * normal
+                else:
+                    # Deep penetration: pop to nearest edge
+                    d_left = self.pos.x - r.left
+                    d_right = r.right - self.pos.x
+                    d_top = self.pos.y - r.top
+                    d_bottom = r.bottom - self.pos.y
+                    min_d = min(d_left, d_right, d_top, d_bottom)
+                    if min_d == d_left:
+                        self.pos.x = r.left - self.radius
+                    elif min_d == d_right:
+                        self.pos.x = r.right + self.radius
+                    elif min_d == d_top:
+                        self.pos.y = r.top - self.radius
+                    else:
+                        self.pos.y = r.bottom + self.radius
+                    self.vel = V2()
 
         # Smooth eye heading based on velocity
         spd = self.vel.length()

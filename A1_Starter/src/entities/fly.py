@@ -130,9 +130,8 @@ class Fly:
             self.vel += limit(force, 240.0) * dt
 
         elif self.state == FlyState.Fleeing:
-            # TODO: replace simple flee with predictive evade for extra credit
-            # force = evade(self.pos, self.vel, frog.pos, frog.vel, FLY_SPEED)
-            force = flee(self.pos, self.vel, frog.pos, FLY_SPEED)
+            # Replace simple flee with predictive evade for extra credit
+            force = evade(self.pos, self.vel, frog.pos, frog.vel, FLY_SPEED)
 
             # Anchor blend so the group does not disappear off screen
             center = V2(bounds_rect.centerx, bounds_rect.centery)
@@ -141,9 +140,8 @@ class Fly:
             self.vel += limit(force, 340.0) * dt
 
         elif self.state == FlyState.Idle:
-            # TODO: use wander_force to provide gentle drifting
-            # force = wander_force(self.vel, rng_seed=self._rng_seed)
-            force = V2()
+            # Use wander_force to provide gentle drifting
+            force = wander_force(self.vel, rng_seed=self._rng_seed)
             self.vel += limit(force, 120.0) * dt
             self.vel *= 0.98  # mild damping so idle feels soft
 

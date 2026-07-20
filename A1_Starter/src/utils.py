@@ -51,7 +51,7 @@ def circle_rect_intersect(center, radius, rect):
     np = nearest_point_on_rect(center, rect)
     return (center - np).length_squared() <= radius * radius
 
-def segment_circlecast_hits_rect(p0, p1, radius, rect, step=6.0):
+def segment_circlecast_hits_rect(p0, p1, radius, rect, step=6.0, ignore_start=False):
     """
     Approximate a circle cast along a line from p0 to p1.
     We sample points along the segment and test a circle intersect at each step.
@@ -61,16 +61,17 @@ def segment_circlecast_hits_rect(p0, p1, radius, rect, step=6.0):
     if length == 0:
         return circle_rect_intersect(p0, radius, rect)
     n = max(1, int(length / step))
-    for i in range(n + 1):
+    start_idx = 1 if ignore_start else 0
+    for i in range(start_idx, n + 1):
         t = i / n
         pos = p0 + d * t
         if circle_rect_intersect(pos, radius, rect):
             return True
     return False
 
-def circlecast_hits_any_rect(p0, p1, radius, rects, step=6.0):
+def circlecast_hits_any_rect(p0, p1, radius, rects, step=6.0, ignore_start=False):
     """Return True if the swept circle between p0 and p1 hits any rect in the list."""
     for r in rects:
-        if segment_circlecast_hits_rect(p0, p1, radius, r, step):
+        if segment_circlecast_hits_rect(p0, p1, radius, r, step, ignore_start):
             return True
     return False

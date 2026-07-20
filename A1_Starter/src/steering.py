@@ -8,7 +8,7 @@
 #   Use dt in update loops when integrating velocity to keep motion consistent.
 # ============================================================================
 
-import math
+import math, random
 from pygame.math import Vector2 as V2
 from utils import limit, circlecast_hits_any_rect
 from settings import (
@@ -145,21 +145,28 @@ def seek_with_avoid(pos, vel, target, max_speed, radius, rects, lookahead=AVOID_
     reach = min(lookahead, d.length())
     end_point = pos + direction * reach
 
-    # Step 1: check straight corridor
+    # Base the avoidance scan on the current velocity heading if moving,
+    # otherwise fall back to target direction.
+    if vel.length_squared() > 1e-3:
+        heading = vel.normalize()
+    else:
+        heading = direction
+
+    # Step 1: check straight corridor to target
     if not circlecast_hits_any_rect(pos, end_point, radius, rects):
         return seek(pos, vel, target, max_speed)
 
-    # Step 2-3: try angled corridors, alternating right and left
+    # Step 2-3: try angled corridors relative to current heading, alternating right and left
     for angle in range(AVOID_ANGLE_INCREMENT, AVOID_MAX_ANGLE + 1, AVOID_ANGLE_INCREMENT):
         # Clockwise
-        rot_r = direction.rotate(angle)
-        end_r = pos + rot_r * lookahead
-        if not circlecast_hits_any_rect(pos, end_r, radius, rects):
+        rot_r = heading.rotate(angle)
+        end_r = pos + rot_r * reach
+        if not circlecast_hits_any_rect(pos, end_r, radius, rects, ignore_start=True):
             return seek(pos, vel, end_r, max_speed)
         # Counter-clockwise
-        rot_l = direction.rotate(-angle)
-        end_l = pos + rot_l * lookahead
-        if not circlecast_hits_any_rect(pos, end_l, radius, rects):
+        rot_l = heading.rotate(-angle)
+        end_l = pos + rot_l * reach
+        if not circlecast_hits_any_rect(pos, end_l, radius, rects, ignore_start=True):
             return seek(pos, vel, end_l, max_speed)
 
     # Step 4: all corridors blocked, gentle brake
@@ -167,31 +174,51 @@ def seek_with_avoid(pos, vel, target, max_speed, radius, rects, lookahead=AVOID_
 
 # ---------------- New behaviours to be implemented ----------------
 
+_wander_angles = {}
+
 def pursue(pos, vel, target_pos, target_vel, max_speed):
     """
     Predict the future position of the target then seek that point.
-    Suggested
-      distance = |target_pos - pos|
-      time_horizon = distance / (max_speed + small_eps)
-      predicted    = target_pos + target_vel * time_horizon
-      return seek toward predicted
-    Replace simple seek in Snake Aggro with pursue for better interception.
     """
-    raise NotImplementedError("Implement pursue with prediction")
+    d = target_pos - pos
+    dist = d.length()
+    time_horizon = dist / (max_speed + 1e-5)
+    predicted = target_pos + target_vel * time_horizon
+    return seek(pos, vel, predicted, max_speed)
 
 def evade(pos, vel, threat_pos, threat_vel, max_speed):
     """
     Predict the future position of a threat then flee from that point.
-    This is the inverse of pursue. Use the same prediction idea.
     """
-    raise NotImplementedError("Implement evade as inverse of pursue")
+    d = threat_pos - pos
+    dist = d.length()
+    time_horizon = dist / (max_speed + 1e-5)
+    predicted = threat_pos + threat_vel * time_horizon
+    return flee(pos, vel, predicted, max_speed)
 
 def wander_force(me_vel, jitter_deg=12.0, circle_distance=24.0, circle_radius=18.0, rng_seed=None):
     """
     Return a small random steering vector for gentle drift.
-    Classic wander
+    Classic wander:
       Project a small circle ahead along current heading, then jitter the
       target point on that circle by a tiny random angle each update.
-    Use this for Fly Idle and Snake Confused.
     """
-    raise NotImplementedError("Implement wander_force")
+    global _wander_angles
+    # Use rng_seed as a key to keep track of the unique wander angle for each agent
+    key = rng_seed if rng_seed is not None else 0
+    if key not in _wander_angles:
+        # Initialize randomly if first time
+        _wander_angles[key] = random.uniform(0, 360)
+    
+    # Jitter the angle by a small amount
+    _wander_angles[key] += random.uniform(-jitter_deg, jitter_deg)
+    
+    # Calculate heading
+    if me_vel.length_squared() > 0:
+        heading = me_vel.normalize()
+    else:
+        heading = V2(1, 0)
+        
+    circle_center = heading * circle_distance
+    displacement = heading.rotate(_wander_angles[key]) * circle_radius
+    return circle_center + displacement
