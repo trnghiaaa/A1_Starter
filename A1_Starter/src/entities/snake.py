@@ -20,7 +20,7 @@ from settings import (
     SNAKE_RADIUS, SNAKE_SPEED, AGGRO_RANGE, DEAGGRO_RANGE,
     AVOID_LOOKAHEAD
 )
-from utils import circlecast_hits_any_rect
+from utils import circlecast_hits_any_rect, circle_rect_intersect, nearest_point_on_rect
 from steering import arrive, seek, seek_with_avoid, integrate_velocity, pursue, wander_force
 
 class SnakeState(Enum):
@@ -48,15 +48,14 @@ class Snake:
         # Obstacles for avoidance
         self.rects = rects
 
-        # Adjust home and patrol_point if they happen to spawn inside any obstacle
-        from utils import nearest_point_on_rect
+        # Adjust home and patrol_point if they happen to spawn inside or too close to any obstacle
         for r in self.rects:
             # Adjust home
-            if r.collidepoint(self.home):
+            if circle_rect_intersect(self.home, self.radius + 20, r):
                 np = nearest_point_on_rect(self.home, r)
                 diff = self.home - np
                 if diff.length_squared() > 0:
-                    self.home += diff.normalize() * (self.radius + 15)
+                    self.home += diff.normalize() * (self.radius + 25)
                 else:
                     d_left = self.home.x - r.left
                     d_right = r.right - self.home.x
@@ -64,22 +63,22 @@ class Snake:
                     d_bottom = r.bottom - self.home.y
                     min_d = min(d_left, d_right, d_top, d_bottom)
                     if min_d == d_left:
-                        self.home.x = r.left - (self.radius + 15)
+                        self.home.x = r.left - (self.radius + 25)
                     elif min_d == d_right:
-                        self.home.x = r.right + (self.radius + 15)
+                        self.home.x = r.right + (self.radius + 25)
                     elif min_d == d_top:
-                        self.home.y = r.top - (self.radius + 15)
+                        self.home.y = r.top - (self.radius + 25)
                     else:
-                        self.home.y = r.bottom + (self.radius + 15)
+                        self.home.y = r.bottom + (self.radius + 25)
                 # Sync pos with the updated home
                 self.pos = V2(self.home)
 
             # Adjust patrol_point
-            if r.collidepoint(self.patrol_point):
+            if circle_rect_intersect(self.patrol_point, self.radius + 20, r):
                 np = nearest_point_on_rect(self.patrol_point, r)
                 diff = self.patrol_point - np
                 if diff.length_squared() > 0:
-                    self.patrol_point += diff.normalize() * (self.radius + 15)
+                    self.patrol_point += diff.normalize() * (self.radius + 25)
                 else:
                     d_left = self.patrol_point.x - r.left
                     d_right = r.right - self.patrol_point.x
@@ -87,13 +86,13 @@ class Snake:
                     d_bottom = r.bottom - self.patrol_point.y
                     min_d = min(d_left, d_right, d_top, d_bottom)
                     if min_d == d_left:
-                        self.patrol_point.x = r.left - (self.radius + 15)
+                        self.patrol_point.x = r.left - (self.radius + 25)
                     elif min_d == d_right:
-                        self.patrol_point.x = r.right + (self.radius + 15)
+                        self.patrol_point.x = r.right + (self.radius + 25)
                     elif min_d == d_top:
-                        self.patrol_point.y = r.top - (self.radius + 15)
+                        self.patrol_point.y = r.top - (self.radius + 25)
                     else:
-                        self.patrol_point.y = r.bottom + (self.radius + 15)
+                        self.patrol_point.y = r.bottom + (self.radius + 25)
 
         # Drawing hint for head direction
         self.heading_deg = 0.0
@@ -160,9 +159,9 @@ class Snake:
         # ---------------- State behaviours ----------------
         if self.state == SnakeState.Aggro:
             self.color = (255, 150, 150)
-            # Calculate predicted future target for pursue
+            # Calculate predicted future target for pursue with capped prediction (max 0.6s)
             d = frog.pos - self.pos
-            time_horizon = d.length() / (self.speed + 1e-5)
+            time_horizon = min(d.length() / (self.speed + 1e-5), 0.6)
             target = frog.pos + frog.vel * time_horizon
             base_steer = seek(self.pos, self.vel, target, self.speed)
         elif self.state == SnakeState.PatrolAway:

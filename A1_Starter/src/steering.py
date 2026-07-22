@@ -179,23 +179,25 @@ def seek_with_avoid(pos, vel, target, max_speed, radius, rects, lookahead=AVOID_
 
 _wander_angles = {}
 
-def pursue(pos, vel, target_pos, target_vel, max_speed):
+def pursue(pos, vel, target_pos, target_vel, max_speed, max_prediction=0.6):
     """
     Predict the future position of the target then seek that point.
+    Cap time_horizon to max_prediction to prevent target projecting into walls.
     """
     d = target_pos - pos
     dist = d.length()
-    time_horizon = dist / (max_speed + 1e-5)
+    time_horizon = min(dist / (max_speed + 1e-5), max_prediction)
     predicted = target_pos + target_vel * time_horizon
     return seek(pos, vel, predicted, max_speed)
 
-def evade(pos, vel, threat_pos, threat_vel, max_speed):
+def evade(pos, vel, threat_pos, threat_vel, max_speed, max_prediction=0.6):
     """
     Predict the future position of a threat then flee from that point.
+    Cap time_horizon to max_prediction to prevent over-reacting.
     """
     d = threat_pos - pos
     dist = d.length()
-    time_horizon = dist / (max_speed + 1e-5)
+    time_horizon = min(dist / (max_speed + 1e-5), max_prediction)
     predicted = threat_pos + threat_vel * time_horizon
     return flee(pos, vel, predicted, max_speed)
 
