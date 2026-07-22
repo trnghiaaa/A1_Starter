@@ -104,11 +104,21 @@ class Snake:
         # Confused state timer
         self.confused_timer = 0.0
 
+        # Position history for rendering slithering trailing body segments
+        self.history = [V2(self.pos) for _ in range(60)]
+
         # RNG for wander if needed
         self._rng_seed = random.randint(0, 999999)
 
     def set_state(self, st):
         """Switch to a new FSM state."""
+        if st == SnakeState.Harmless and self.state != SnakeState.Harmless:
+            # Instantly redirect velocity toward home for a swift, responsive turn
+            d = self.home - self.pos
+            if d.length_squared() > 0:
+                self.vel = d.normalize() * self.speed * 1.2
+            # Reset history buffer for clean segment turning
+            self.history = [V2(self.pos) for _ in range(60)]
         self.state = st
 
     def update(self, dt, frog):
@@ -138,7 +148,7 @@ class Snake:
 
         elif self.state == SnakeState.Harmless:
             # When harmless snake reaches home, enter Confused briefly then resume patrol
-            if (self.home - self.pos).length() < 12:
+            if (self.home - self.pos).length() < 32:
                 self.confused_timer = 1.5  # seconds of confusion
                 self.set_state(SnakeState.Confused)
 
@@ -159,18 +169,18 @@ class Snake:
             self.color = (100, 180, 255)  # Distinct Light Blue
             target = self.patrol_point
             base_steer = arrive(self.pos, self.vel, self.patrol_point, self.speed)
-            if (self.patrol_point - self.pos).length() < 10:
+            if (self.patrol_point - self.pos).length() < 24:
                 self.set_state(SnakeState.PatrolHome)
         elif self.state == SnakeState.PatrolHome:
             self.color = (180, 220, 180)
             target = self.home
             base_steer = arrive(self.pos, self.vel, self.home, self.speed)
-            if (self.home - self.pos).length() < 10:
+            if (self.home - self.pos).length() < 24:
                 self.set_state(SnakeState.PatrolAway)
         elif self.state == SnakeState.Harmless:
             self.color = (210, 130, 255)  # Distinct Light Purple / Violet
             target = self.home
-            base_steer = arrive(self.pos, self.vel, self.home, self.speed * 0.9)
+            base_steer = arrive(self.pos, self.vel, self.home, self.speed * 1.25)
         else:  # Confused
             self.color = (245, 210, 160)
             target = None
@@ -236,10 +246,53 @@ class Snake:
         if self.pos.y < self.radius: self.pos.y = self.radius
         if self.pos.y > HEIGHT - self.radius: self.pos.y = HEIGHT - self.radius
 
+        # Record position history for rendering slithering body segments
+        if not self.history or (self.pos - self.history[-1]).length() > 70:
+            # Reset history on teleports
+            self.history = [V2(self.pos) for _ in range(60)]
+        elif (self.pos - self.history[-1]).length() >= 3.5:
+            self.history.append(V2(self.pos))
+            if len(self.history) > 60:
+                self.history.pop(0)
+
     def draw(self, surf):
-        # Body
-        pygame.draw.circle(surf, self.color, self.pos, self.radius)
-        # Simple eye in heading direction
-        head = self.pos + V2(1, 0).rotate(self.heading_deg) * (self.radius - 2)
-        pygame.draw.circle(surf, (30, 30, 30), head, 3)
-        pygame.draw.circle(surf, WHITE, head, 5, 1)
+        # 1. Render trailing body segments (from tail to head)
+        segment_count = 5
+        segment_radii = [
+            self.radius * 0.88,
+            self.radius * 0.76,
+            self.radius * 0.64,
+            self.radius * 0.52,
+            self.radius * 0.40,
+        ]
+
+        for i in range(segment_count - 1, -1, -1):
+            idx = max(0, len(self.history) - 1 - (i + 1) * 7)
+            seg_pos = self.history[idx]
+            r = segment_radii[i]
+            # Calculate shaded segment color
+            factor = 0.75 + 0.25 * (1.0 - (i + 1) / (segment_count + 1))
+            seg_color = (
+                max(0, min(255, int(self.color[0] * factor))),
+                max(0, min(255, int(self.color[1] * factor))),
+                max(0, min(255, int(self.color[2] * factor)))
+            )
+            pygame.draw.circle(surf, seg_color, (int(seg_pos.x), int(seg_pos.y)), int(r))
+
+        # 2. Render head
+        pygame.draw.circle(surf, self.color, (int(self.pos.x), int(self.pos.y)), int(self.radius))
+
+        # 3. Render dual eyes oriented along heading direction
+        heading_rad = math.radians(self.heading_deg)
+        forward = V2(math.cos(heading_rad), math.sin(heading_rad))
+        right = V2(-forward.y, forward.x)
+
+        eye_offset_fwd = self.radius * 0.50
+        eye_offset_side = self.radius * 0.42
+
+        left_eye = self.pos + forward * eye_offset_fwd + right * eye_offset_side
+        right_eye = self.pos + forward * eye_offset_fwd - right * eye_offset_side
+
+        for eye_pos in [left_eye, right_eye]:
+            pygame.draw.circle(surf, (20, 20, 20), (int(eye_pos.x), int(eye_pos.y)), 3)
+            pygame.draw.circle(surf, WHITE, (int(eye_pos.x), int(eye_pos.y)), 4, 1)

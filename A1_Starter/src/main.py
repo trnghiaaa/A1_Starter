@@ -18,6 +18,8 @@ from entities.frog import Frog
 from entities.fly import Fly
 from entities.snake import Snake, SnakeState
 
+from vfx import VFXManager
+
 def main():
     # Initialize Pygame and create a window and a clock
     pygame.init()
@@ -28,6 +30,13 @@ def main():
     # Fonts for text and overlay
     font = pygame.font.SysFont("consolas", 22)
     bigfont = pygame.font.SysFont("consolas", 48, bold=True)
+    small_font = pygame.font.SysFont("consolas", 18, bold=True)
+
+    # VFX Manager
+    vfx = VFXManager(font=small_font)
+
+    # Main render surface for screen shake
+    render_surf = pygame.Surface((WIDTH, HEIGHT))
 
     def reset():
         """
@@ -92,6 +101,8 @@ def main():
                 frog.set_target(pygame.mouse.get_pos())
 
         # ---------------- Update ----------------
+        vfx.update(dt)
+
         if not game_over:
             # Update frog first since other agents may query frog position
             frog.update(dt)
@@ -102,6 +113,7 @@ def main():
 
                 # Eat a fly when close enough to the frog center
                 if (f.pos - frog.pos).length_squared() <= (f.radius + FROG_RADIUS) ** 2:
+                    vfx.add_eat_fly(f.pos)
                     flies.remove(f)
                     fly_count += 1
                     if fly_count >= FLIES_TO_WIN:
@@ -116,12 +128,12 @@ def main():
             # For each bubble and snake pair, if they overlap:
             #   - pop the bubble
             #   - if the snake is Aggro, switch it to Harmless or Confused
-            # This logic is left as a student task to connect FSMs and mechanics.
             for s in snakes:
                 for b in frog.bubbles:
                     if b.alive and (b.pos - s.pos).length_squared() <= (BUBBLE_RADIUS + s.radius) ** 2:
                         if s.state == SnakeState.Aggro:
                             s.set_state(SnakeState.Harmless)
+                        vfx.add_bubble_pop(b.pos)
                         b.alive = False
 
             # Check bubble collisions with static obstacles (boxes)
@@ -130,6 +142,7 @@ def main():
                 if b.alive:
                     for r in world.obstacles:
                         if circle_rect_intersect(b.pos, BUBBLE_RADIUS, r):
+                            vfx.add_bubble_pop(b.pos)
                             b.alive = False
                             break
 
@@ -142,52 +155,57 @@ def main():
                     if frog.can_be_hurt():
                         health -= 1
                         frog.start_hurt()
+                        vfx.add_hurt_impact(frog.pos)
                         s.set_state(SnakeState.Harmless)
                         if health <= 0:
                             game_over = True
                             win = False
 
         # ---------------- Draw ----------------
-        screen.fill(BG)           # clear background
-        draw_grid(screen)         # draw a soft grid
-        world.draw(screen)        # draw obstacles
+        render_surf.fill(BG)           # clear background
+        draw_grid(render_surf)         # draw a soft grid
+        world.draw(render_surf)        # draw obstacles
 
-        for f in flies:           # draw flies
-            f.draw(screen)
-        for s in snakes:          # draw snakes
-            s.draw(screen)
-        frog.draw(screen)         # draw frog and bubbles
+        for f in flies:                # draw flies
+            f.draw(render_surf)
+        for s in snakes:               # draw snakes
+            s.draw(render_surf)
+        frog.draw(render_surf)         # draw frog and bubbles
+        vfx.draw(render_surf)          # draw particles and floating text
 
         # Draw hearts for health
         for i in range(START_HEALTH):
             cx = 16 + i * 26
             cy = 18
             col = RED if i < health else (80, 60, 60)
-            pygame.draw.circle(screen, col, (cx, cy), 10)
-        pygame.draw.circle(screen, col, (cx + 12, cy), 10)
-        points = [(cx - 6, cy + 2), (cx + 18, cy + 2), (cx + 6, cy + 18)]
-        pygame.draw.polygon(screen, col, points)
+            pygame.draw.circle(render_surf, col, (cx, cy), 10)
+            pygame.draw.circle(render_surf, col, (cx + 12, cy), 10)
+            points = [(cx - 6, cy + 2), (cx + 18, cy + 2), (cx + 6, cy + 18)]
+            pygame.draw.polygon(render_surf, col, points)
 
         # Draw fly counter and control hint
         txt = font.render(f"Flies: {fly_count}/{FLIES_TO_WIN}", True, (240, 240, 240))
-        screen.blit(txt, (16, 42))
+        render_surf.blit(txt, (16, 42))
         tips = font.render("Click to move, Space to bubble, R to restart", True, MUTED)
-        screen.blit(tips, (16, 68))
+        render_surf.blit(tips, (16, 68))
 
         # If game over, dim the screen and show a message
         if game_over:
             shade = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             shade.fill((0, 0, 0, 160))
-            screen.blit(shade, (0, 0))
+            render_surf.blit(shade, (0, 0))
             msg = "You won!" if win else "You died!"
             col = (90, 220, 120) if win else RED
             text = bigfont.render(msg, True, col)
             hint = font.render("Press R to restart", True, (240, 240, 240))
             rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 10))
-            screen.blit(text, rect)
-            screen.blit(hint, hint.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 44)))
+            render_surf.blit(text, rect)
+            render_surf.blit(hint, hint.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 44)))
 
-        # Present the frame
+        # Present the frame with screen shake offset
+        ox, oy = vfx.get_shake_offset()
+        screen.fill((0, 0, 0))
+        screen.blit(render_surf, (int(ox), int(oy)))
         pygame.display.flip()
 
     # Clean shutdown
