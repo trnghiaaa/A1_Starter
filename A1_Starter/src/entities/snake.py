@@ -120,13 +120,20 @@ class Snake:
         # Distance to frog for transitions
         dist = (frog.pos - self.pos).length()
 
+        # Check if frog is hidden inside a box
+        frog_hidden = False
+        for r in self.rects:
+            if r.collidepoint(frog.pos):
+                frog_hidden = True
+                break
+
         # ---------------- FSM transitions ----------------
         if self.state == SnakeState.Aggro:
-            if dist > DEAGGRO_RANGE:
+            if dist > DEAGGRO_RANGE or frog_hidden:
                 self.set_state(SnakeState.PatrolHome)
 
         elif self.state in (SnakeState.PatrolHome, SnakeState.PatrolAway):
-            if dist < AGGRO_RANGE:
+            if dist < AGGRO_RANGE and not frog_hidden:
                 self.set_state(SnakeState.Aggro)
 
         elif self.state == SnakeState.Harmless:
@@ -149,7 +156,7 @@ class Snake:
             target = frog.pos + frog.vel * time_horizon
             base_steer = seek(self.pos, self.vel, target, self.speed)
         elif self.state == SnakeState.PatrolAway:
-            self.color = (180, 200, 255)
+            self.color = (100, 180, 255)  # Distinct Light Blue
             target = self.patrol_point
             base_steer = arrive(self.pos, self.vel, self.patrol_point, self.speed)
             if (self.patrol_point - self.pos).length() < 10:
@@ -161,7 +168,7 @@ class Snake:
             if (self.home - self.pos).length() < 10:
                 self.set_state(SnakeState.PatrolAway)
         elif self.state == SnakeState.Harmless:
-            self.color = (190, 180, 255)
+            self.color = (210, 130, 255)  # Distinct Light Purple / Violet
             target = self.home
             base_steer = arrive(self.pos, self.vel, self.home, self.speed * 0.9)
         else:  # Confused
