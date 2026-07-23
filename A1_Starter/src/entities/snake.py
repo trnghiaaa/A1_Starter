@@ -171,11 +171,12 @@ class Snake:
         # ---------------- State behaviours ----------------
         if self.state == SnakeState.Aggro:
             self.color = (255, 150, 150)
-            # Calculate predicted future target for pursue with capped prediction (max 0.6s)
+            # Compute predicted target for avoidance corridor checks
             d = frog.pos - self.pos
             time_horizon = min(d.length() / (self.speed + 1e-5), 0.6)
             target = frog.pos + frog.vel * time_horizon
-            base_steer = seek(self.pos, self.vel, target, self.speed)
+            # Use the pursue() steering behavior (handles prediction internally)
+            base_steer = pursue(self.pos, self.vel, frog.pos, frog.vel, self.speed)
         elif self.state == SnakeState.PatrolAway:
             self.color = (100, 180, 255)  # Distinct Light Blue
             target = self.patrol_point
@@ -279,14 +280,17 @@ class Snake:
         # Smooth eye heading based on velocity with wide head turning in Confused state
         spd = self.vel.length()
         if spd > 4:
-            def lerp(a, b, t): return a + (b - a) * t
+            def lerp_angle(a, b, t):
+                """Interpolate between angles taking the shortest arc."""
+                diff = (b - a + 180) % 360 - 180
+                return a + diff * t
             base_heading = math.degrees(math.atan2(self.vel.y, self.vel.x))
             if self.state == SnakeState.Confused:
                 # Add wide back-and-forth head oscillation (+/- 55 degrees) to look confused
                 head_wiggle = math.sin(pygame.time.get_ticks() * 0.015) * 55.0
-                self.heading_deg = lerp(self.heading_deg, base_heading + head_wiggle, 0.25)
+                self.heading_deg = lerp_angle(self.heading_deg, base_heading + head_wiggle, 0.25)
             else:
-                self.heading_deg = lerp(self.heading_deg, base_heading, 0.15)
+                self.heading_deg = lerp_angle(self.heading_deg, base_heading, 0.15)
 
         # Keep inside arena
         if self.pos.x < self.radius: self.pos.x = self.radius

@@ -110,6 +110,7 @@ class Fly:
                 self.idle_timer = 0.0
 
         # ---------------- State behaviours ----------------
+        force = V2()  # default zero force; overwritten by each state branch
         if self.state == FlyState.Flock:
             # Build neighbor list for boids
             neighbors = []

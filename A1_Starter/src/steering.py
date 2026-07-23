@@ -65,13 +65,14 @@ def arrive(pos, vel, target, max_speed, slow_radius=ARRIVE_SLOW_RADIUS, stop_rad
         desired = d.normalize() * max_speed
     return desired - vel
 
-def integrate_velocity(vel, force, dt, max_speed):
+def integrate_velocity(vel, force, dt, max_speed, max_force=500.0):
     """
     Apply a steering force to velocity using Euler integration.
     Then clamp to max speed and return the new velocity.
     Use this inside agent update methods after computing steering forces.
+    max_force caps the steering force magnitude to prevent explosive acceleration.
     """
-    vel += limit(force, 500.0) * dt
+    vel += limit(force, max_force) * dt
     if vel.length() > max_speed:
         vel.scale_to_length(max_speed)
     return vel

@@ -9,7 +9,7 @@
 #   Draw the frog body and a simple eye that points in the facing direction.
 # ============================================================================
 
-import time
+# (no wall-clock imports needed — all timing uses dt)
 import pygame
 from pygame.math import Vector2 as V2
 from settings import (
@@ -29,12 +29,13 @@ class Bubble:
     def __init__(self, pos, dir_vec):
         self.pos = V2(pos)
         self.vel = (dir_vec.normalize() if dir_vec.length_squared() > 0 else V2(1, 0)) * BUBBLE_SPEED
-        self.birth = time.time()
+        self.age = 0.0
         self.alive = True
 
     def update(self, dt):
         self.pos += self.vel * dt
-        if time.time() - self.birth > BUBBLE_LIFETIME:
+        self.age += dt
+        if self.age > BUBBLE_LIFETIME:
             self.alive = False
 
     def draw(self, surf):
