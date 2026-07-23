@@ -103,6 +103,9 @@ class Snake:
         # Confused state timer
         self.confused_timer = 0.0
 
+        # Bounce visual effect timer
+        self.bounce_timer = 0.0
+
         # Position history for rendering slithering trailing body segments
         self.history = [V2(self.pos) for _ in range(60)]
 
@@ -120,11 +123,13 @@ class Snake:
             self.history = [V2(self.pos) for _ in range(60)]
         self.state = st
 
-    def update(self, dt, frog):
+    def update(self, dt, frog, vfx=None):
         """
         Update state transitions based on distance to frog and timers.
         Then compute a steering force for the active state and integrate motion.
         """
+        if self.bounce_timer > 0:
+            self.bounce_timer -= dt
 
         # Distance to frog for transitions
         dist = (frog.pos - self.pos).length()
@@ -147,9 +152,9 @@ class Snake:
                 self.set_state(SnakeState.Aggro)
 
         elif self.state == SnakeState.Harmless:
-            # When harmless snake reaches home, enter Confused briefly then resume patrol
+            # When harmless snake reaches home, enter Confused state (3.0s duration)
             if (self.home - self.pos).length() < 32:
-                self.confused_timer = 1.5  # seconds of confusion
+                self.confused_timer = 2.0  # seconds of confusion
                 self.set_state(SnakeState.Confused)
 
         elif self.state == SnakeState.Confused:
@@ -184,8 +189,8 @@ class Snake:
         else:  # Confused
             self.color = (245, 210, 160)
             target = None
-            # Use larger jitter and zero circle distance for an erratic, "confused" zig-zag walk
-            steer = wander_force(self.vel, jitter_deg=45.0, circle_distance=0.0, circle_radius=50.0, rng_seed=self._rng_seed)
+            # Use wide jitter and large circle radius for clear erratic zig-zag wandering
+            steer = wander_force(self.vel, jitter_deg=75.0, circle_distance=0.0, circle_radius=70.0, rng_seed=self._rng_seed)
 
         if target is not None:
             # Check if straight corridor to the target is blocked
@@ -213,12 +218,16 @@ class Snake:
                 if dist > 0:
                     overlap = self.radius - dist
                     self.pos += diff.normalize() * overlap
-                    # Zero out velocity component pointing into the obstacle
+                    # Reflect velocity along collision normal for a springy bounce effect off tree edges
                     normal = diff.normalize()
-                    if self.vel.dot(normal) < 0:
-                        self.vel -= self.vel.dot(normal) * normal
+                    dot = self.vel.dot(normal)
+                    if dot < 0:
+                        self.vel -= 1.4 * dot * normal
+                        self.bounce_timer = 0.35
+                        if vfx:
+                            vfx.add_bounce_impact(self.pos, normal)
                 else:
-                    # Deep penetration: pop to nearest edge
+                    # Deep penetration: pop to nearest edge and bounce outward
                     d_left = self.pos.x - r.left
                     d_right = r.right - self.pos.x
                     d_top = self.pos.y - r.top
@@ -226,19 +235,28 @@ class Snake:
                     min_d = min(d_left, d_right, d_top, d_bottom)
                     if min_d == d_left:
                         self.pos.x = r.left - self.radius
+                        self.vel.x = -abs(self.vel.x) * 0.8
                     elif min_d == d_right:
                         self.pos.x = r.right + self.radius
+                        self.vel.x = abs(self.vel.x) * 0.8
                     elif min_d == d_top:
                         self.pos.y = r.top - self.radius
+                        self.vel.y = -abs(self.vel.y) * 0.8
                     else:
                         self.pos.y = r.bottom + self.radius
-                    self.vel = V2()
+                        self.vel.y = abs(self.vel.y) * 0.8
 
-        # Smooth eye heading based on velocity
+        # Smooth eye heading based on velocity with wide head turning in Confused state
         spd = self.vel.length()
         if spd > 4:
             def lerp(a, b, t): return a + (b - a) * t
-            self.heading_deg = lerp(self.heading_deg, math.degrees(math.atan2(self.vel.y, self.vel.x)), 0.15)
+            base_heading = math.degrees(math.atan2(self.vel.y, self.vel.x))
+            if self.state == SnakeState.Confused:
+                # Add wide back-and-forth head oscillation (+/- 55 degrees) to look confused
+                head_wiggle = math.sin(pygame.time.get_ticks() * 0.015) * 55.0
+                self.heading_deg = lerp(self.heading_deg, base_heading + head_wiggle, 0.25)
+            else:
+                self.heading_deg = lerp(self.heading_deg, base_heading, 0.15)
 
         # Keep inside arena
         if self.pos.x < self.radius: self.pos.x = self.radius
@@ -296,3 +314,23 @@ class Snake:
         for eye_pos in [left_eye, right_eye]:
             pygame.draw.circle(surf, (20, 20, 20), (int(eye_pos.x), int(eye_pos.y)), 3)
             pygame.draw.circle(surf, WHITE, (int(eye_pos.x), int(eye_pos.y)), 4, 1)
+
+        # 4. Render spinning dizzy stars when in Confused state
+        if self.state == SnakeState.Confused:
+            t = pygame.time.get_ticks() * 0.007
+            center_star = self.pos + V2(0, -self.radius - 14)
+            for i in range(3):
+                ang = t + i * (math.pi * 2 / 3)
+                sx = center_star.x + math.cos(ang) * 14
+                sy = center_star.y + math.sin(ang) * 5
+                pygame.draw.circle(surf, (255, 230, 90), (int(sx), int(sy)), 3)
+                pygame.draw.circle(surf, (200, 150, 20), (int(sx), int(sy)), 3, 1)
+
+        # 5. Render expanding elastic shockwave ripple ring when bouncing off an obstacle
+        if self.bounce_timer > 0:
+            progress = max(0.0, min(1.0, self.bounce_timer / 0.35))
+            ring_r = int(self.radius + (1.0 - progress) * 22)
+            alpha = int(220 * progress)
+            ring_surf = pygame.Surface((ring_r * 2 + 6, ring_r * 2 + 6), pygame.SRCALPHA)
+            pygame.draw.circle(ring_surf, (160, 235, 255, alpha), (ring_r + 3, ring_r + 3), ring_r, 3)
+            surf.blit(ring_surf, (int(self.pos.x - ring_r - 3), int(self.pos.y - ring_r - 3)))

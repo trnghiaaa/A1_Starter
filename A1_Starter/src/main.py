@@ -122,7 +122,7 @@ def main():
 
             # Update snakes and their FSM decisions
             for s in snakes:
-                s.update(dt, frog)
+                s.update(dt, frog, vfx)
 
             # ------------- Bubble hit logic -------------
             # For each bubble and snake pair, if they overlap:
