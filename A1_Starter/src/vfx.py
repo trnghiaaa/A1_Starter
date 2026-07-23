@@ -141,3 +141,15 @@ class VFXManager:
             radius = random.uniform(3.0, 6.0)
             lifetime = random.uniform(0.3, 0.55)
             self.particles.append(Particle(pos, vel, color, radius, lifetime))
+
+    def add_bounce_impact(self, pos, normal=None):
+        base_dir = V2(normal) if normal and normal.length_squared() > 0 else V2(0, -1)
+        base_angle = math.atan2(base_dir.y, base_dir.x)
+        for _ in range(7):
+            angle = base_angle + random.uniform(-0.85, 0.85)
+            spd = random.uniform(60, 180)
+            vel = V2(math.cos(angle) * spd, math.sin(angle) * spd)
+            color = random.choice([(255, 255, 255), (140, 220, 255), (255, 230, 110)])
+            radius = random.uniform(2.5, 4.5)
+            lifetime = random.uniform(0.15, 0.35)
+            self.particles.append(Particle(pos, vel, color, radius, lifetime))

@@ -16,7 +16,7 @@ from settings import (
     WIDTH, HEIGHT, WHITE, GREEN, BLUE,
     FROG_RADIUS, FROG_SPEED,
     BUBBLE_RADIUS, BUBBLE_SPEED, BUBBLE_LIFETIME,
-    HURT_INVULN
+    HURT_INVULN, ARRIVE_SLOW_RADIUS, ARRIVE_STOP_RADIUS
 )
 from utils import clamp
 from steering import arrive, integrate_velocity
@@ -54,6 +54,9 @@ class Frog:
         # Hurt state setup. When hurt_timer > 0 the frog cannot be hit again.
         self.hurt_timer = 0.0
 
+        # Debug visualization attributes
+        self.last_steer = V2()
+
     def set_target(self, p):
         """Set a new target the frog will move toward using Arrive."""
         self.target = V2(p)
@@ -76,6 +79,7 @@ class Frog:
     def update(self, dt):
         # Compute steering with Arrive
         steer = arrive(self.pos, self.vel, self.target, self.speed)
+        self.last_steer = V2(steer)
 
         # Integrate velocity with dt and clamp to max speed
         self.vel = integrate_velocity(self.vel, steer, dt, self.speed)
@@ -119,3 +123,41 @@ class Frog:
         # Bubbles
         for b in self.bubbles:
             b.draw(surf)
+
+    def draw_debug(self, surf, font):
+        """Render AI debug visualization overlay for the Frog when debug_mode is ON."""
+        tx, ty = int(self.target.x), int(self.target.y)
+
+        # 1. Arrive Target Crosshair & Deceleration / Stop Radii
+        # Slow Radius Circle (120px)
+        slow_surf = pygame.Surface((int(ARRIVE_SLOW_RADIUS * 2 + 4), int(ARRIVE_SLOW_RADIUS * 2 + 4)), pygame.SRCALPHA)
+        pygame.draw.circle(slow_surf, (250, 225, 120, 60), (int(ARRIVE_SLOW_RADIUS + 2), int(ARRIVE_SLOW_RADIUS + 2)), int(ARRIVE_SLOW_RADIUS), 1)
+        surf.blit(slow_surf, (tx - int(ARRIVE_SLOW_RADIUS) - 2, ty - int(ARRIVE_SLOW_RADIUS) - 2))
+
+        # Stop Radius Circle (8px)
+        pygame.draw.circle(surf, (250, 225, 120), (tx, ty), int(ARRIVE_STOP_RADIUS), 1)
+        # Target crosshair
+        pygame.draw.line(surf, (250, 225, 120), (tx - 8, ty), (tx + 8, ty), 2)
+        pygame.draw.line(surf, (250, 225, 120), (tx, ty - 8), (tx, ty + 8), 2)
+
+        # Target connection line
+        pygame.draw.line(surf, (250, 225, 120, 120), self.pos, self.target, 1)
+
+        # 2. Fly Threat Range (160px) around Frog
+        threat_r = 160.0
+        threat_surf = pygame.Surface((int(threat_r * 2 + 4), int(threat_r * 2 + 4)), pygame.SRCALPHA)
+        pygame.draw.circle(threat_surf, (255, 200, 80, 40), (int(threat_r + 2), int(threat_r + 2)), int(threat_r), 1)
+        surf.blit(threat_surf, (int(self.pos.x - threat_r - 2), int(self.pos.y - threat_r - 2)))
+
+        # 3. Vectors (Velocity = BLUE, Steering = RED)
+        if self.vel.length_squared() > 0:
+            end_v = self.pos + self.vel * 0.4
+            pygame.draw.line(surf, (80, 160, 255), self.pos, end_v, 2)
+        if self.last_steer.length_squared() > 0:
+            end_s = self.pos + self.last_steer * 0.4
+            pygame.draw.line(surf, (255, 90, 90), self.pos, end_s, 2)
+
+        # 4. State Text Label
+        state_str = f"Frog: Hurt ({self.hurt_timer:.1f}s)" if self.hurt_timer > 0 else "Frog: Normal"
+        txt = font.render(state_str, True, (160, 255, 160))
+        surf.blit(txt, (int(self.pos.x - txt.get_width() // 2), int(self.pos.y - self.radius - 20)))

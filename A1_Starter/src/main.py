@@ -53,8 +53,8 @@ def main():
         # Create snakes with patrol points mirrored across the screen
         snakes = []
         for i in range(NUM_SNAKES):
-            px = 140 + i * 320
-            py = 120 if i % 2 == 0 else HEIGHT - 140
+            px = 180 + i * 280
+            py = 170 if i % 2 == 0 else HEIGHT - 170
             patrol = (WIDTH - px, HEIGHT - py)
             snakes.append(Snake((px, py), patrol, world.obstacles))
 
@@ -68,6 +68,7 @@ def main():
     fly_count = 0
     game_over = False
     win = False
+    debug_mode = False
 
     running = True
     while running:
@@ -83,6 +84,10 @@ def main():
             if e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_ESCAPE:
                     running = False
+
+                if e.key == pygame.K_v:
+                    # Toggle AI debug visualization overlay
+                    debug_mode = not debug_mode
 
                 if not game_over and e.key == pygame.K_SPACE:
                     # Space shoots a bubble from the frog mouth
@@ -122,7 +127,7 @@ def main():
 
             # Update snakes and their FSM decisions
             for s in snakes:
-                s.update(dt, frog)
+                s.update(dt, frog, vfx)
 
             # ------------- Bubble hit logic -------------
             # For each bubble and snake pair, if they overlap:
@@ -173,6 +178,18 @@ def main():
         frog.draw(render_surf)         # draw frog and bubbles
         vfx.draw(render_surf)          # draw particles and floating text
 
+        # ---------------- AI Debug Visualization Overlay ----------------
+        if debug_mode:
+            frog.draw_debug(render_surf, small_font)
+            for f in flies:
+                f.draw_debug(render_surf, flies, small_font)
+            for s in snakes:
+                s.draw_debug(render_surf, small_font)
+
+            # Debug status badge in top right
+            dbg_badge = small_font.render("[DEBUG MODE: ON (V)]", True, (60, 240, 120))
+            render_surf.blit(dbg_badge, (WIDTH - dbg_badge.get_width() - 16, 16))
+
         # Draw hearts for health
         for i in range(START_HEALTH):
             cx = 16 + i * 26
@@ -186,7 +203,7 @@ def main():
         # Draw fly counter and control hint
         txt = font.render(f"Flies: {fly_count}/{FLIES_TO_WIN}", True, (240, 240, 240))
         render_surf.blit(txt, (16, 42))
-        tips = font.render("Click to move, Space to bubble, R to restart", True, MUTED)
+        tips = font.render("Click: move | Space: bubble | V: Debug Mode | R: restart", True, MUTED)
         render_surf.blit(tips, (16, 68))
 
         # If game over, dim the screen and show a message
