@@ -113,6 +113,9 @@ class Snake:
         # Position history for rendering slithering trailing body segments
         self.history = [V2(self.pos) for _ in range(60)]
 
+        # Ripple trail timer
+        self.ripple_timer = 0.0
+
         # RNG for wander if needed
         self._rng_seed = random.randint(0, 999999)
 
@@ -256,6 +259,13 @@ class Snake:
         # Integrate velocity and update position
         self.vel = integrate_velocity(self.vel, steer, dt, self.speed)
         self.pos += self.vel * dt
+
+        # Spawn swimming water ripple trail
+        if vfx and self.vel.length_squared() > 1600:
+            self.ripple_timer -= dt
+            if self.ripple_timer <= 0:
+                vfx.add_water_ripple(self.pos, radius=12.0, max_radius=26.0, color=(120, 190, 240))
+                self.ripple_timer = 0.16
 
         # Resolve collisions with static obstacles (pop out instantly)
         from utils import nearest_point_on_rect

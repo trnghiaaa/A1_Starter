@@ -56,6 +56,9 @@ class Frog:
         # Hurt state setup. When hurt_timer > 0 the frog cannot be hit again.
         self.hurt_timer = 0.0
 
+        # Ripple trail timer
+        self.ripple_timer = 0.0
+
         # Debug visualization attributes
         self.last_steer = V2()
 
@@ -78,7 +81,7 @@ class Frog:
         """Return True if the frog can take damage right now."""
         return self.hurt_timer <= 0
 
-    def update(self, dt):
+    def update(self, dt, vfx=None):
         # Compute steering with Arrive
         steer = arrive(self.pos, self.vel, self.target, self.speed)
         self.last_steer = V2(steer)
@@ -88,6 +91,13 @@ class Frog:
 
         # Move the frog
         self.pos += self.vel * dt
+
+        # Spawn water ripple trail when moving
+        if vfx and self.vel.length_squared() > 1600:
+            self.ripple_timer -= dt
+            if self.ripple_timer <= 0:
+                vfx.add_water_ripple(self.pos, radius=10.0, max_radius=22.0, color=(140, 230, 170))
+                self.ripple_timer = 0.14
 
         # Face in the direction of motion when moving
         if self.vel.length_squared() > 16:

@@ -173,12 +173,12 @@ def main():
             elapsed_time += dt
 
             # Update frog first since other agents may query frog position
-            frog.update(dt)
+            frog.update(dt, vfx)
 
             # Update flies and check if any fly gets caught by the frog
             current_time = pygame.time.get_ticks() / 1000.0
             for f in list(flies):
-                f.update(dt, flies, frog, world.rect, frog.bubbles)
+                f.update(dt, flies, frog, world.rect, frog.bubbles, vfx)
 
                 # Eat a fly when close enough to the frog center
                 if (f.pos - frog.pos).length_squared() <= (f.radius + FROG_RADIUS) ** 2:

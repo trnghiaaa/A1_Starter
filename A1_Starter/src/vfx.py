@@ -48,6 +48,39 @@ class Particle:
         surf.blit(p_surf, (self.pos.x - r - 1, self.pos.y - r - 1))
 
 
+class RippleParticle:
+    """Soft expanding, fading translucent water ring particle for agent movement trails."""
+    def __init__(self, pos, start_radius=6.0, max_radius=20.0, color=(140, 200, 240), lifetime=0.45):
+        self.pos = V2(pos)
+        self.radius = start_radius
+        self.start_radius = start_radius
+        self.max_radius = max_radius
+        self.color = color
+        self.lifetime = lifetime
+        self.max_lifetime = lifetime
+        self.alive = True
+
+    def update(self, dt):
+        self.lifetime -= dt
+        if self.lifetime <= 0:
+            self.alive = False
+            return
+        progress = 1.0 - (self.lifetime / self.max_lifetime)
+        self.radius = self.start_radius + (self.max_radius - self.start_radius) * progress
+
+    def draw(self, surf):
+        if not self.alive:
+            return
+        progress = max(0.0, min(1.0, self.lifetime / self.max_lifetime))
+        alpha = int(110 * progress)
+        r = int(self.radius)
+        if r < 2: return
+        r_surf = pygame.Surface((r * 2 + 4, r * 2 + 4), pygame.SRCALPHA)
+        c = (self.color[0], self.color[1], self.color[2], alpha)
+        pygame.draw.circle(r_surf, c, (r + 2, r + 2), r, 1)
+        surf.blit(r_surf, (int(self.pos.x - r - 2), int(self.pos.y - r - 2)))
+
+
 class FloatingText:
     def __init__(self, pos, text, color=(255, 240, 100), font=None):
         self.pos = V2(pos)
@@ -78,6 +111,7 @@ class FloatingText:
 class VFXManager:
     def __init__(self, font=None):
         self.particles = []
+        self.ripples = []
         self.floating_texts = []
         self.screen_shake = 0.0
         self.font = font
@@ -99,15 +133,25 @@ class VFXManager:
             p.update(dt)
         self.particles = [p for p in self.particles if p.alive]
 
+        for rp in self.ripples:
+            rp.update(dt)
+        self.ripples = [rp for rp in self.ripples if rp.alive]
+
         for ft in self.floating_texts:
             ft.update(dt)
         self.floating_texts = [ft for ft in self.floating_texts if ft.alive]
 
     def draw(self, surf):
+        for rp in self.ripples:
+            rp.draw(surf)
         for p in self.particles:
             p.draw(surf)
         for ft in self.floating_texts:
             ft.draw(surf)
+
+    def add_water_ripple(self, pos, radius=8.0, max_radius=20.0, color=(140, 200, 240)):
+        """Spawns an expanding fading water ripple particle at pos."""
+        self.ripples.append(RippleParticle(pos, start_radius=radius, max_radius=max_radius, color=color))
 
     def trigger_shake(self, duration=0.25):
         self.screen_shake = max(self.screen_shake, duration)

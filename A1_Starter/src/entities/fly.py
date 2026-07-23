@@ -59,7 +59,7 @@ class Fly:
                 return True
         return False
 
-    def update(self, dt, flies, frog, bounds_rect, bubbles):
+    def update(self, dt, flies, frog, bounds_rect, bubbles, vfx=None):
         """
         Update FSM and behavior. Flies use perception to switch states.
         Parameters
@@ -67,6 +67,7 @@ class Fly:
           frog:  player agent used as a threat source
           bounds_rect: world rectangle for anchor force and containment
           bubbles: list of active bubbles to trigger panic
+          vfx: optional VFXManager for visual effects
         """
 
         # Perception radii and timers for the FSM
@@ -158,6 +159,10 @@ class Fly:
         if self.vel.length() > FLY_SPEED:
             self.vel.scale_to_length(FLY_SPEED)
         self.pos += self.vel * dt
+
+        # Spawn occasional hovering water ripple when fleeing fast
+        if vfx and self.state == FlyState.Fleeing and random.random() < 0.04:
+            vfx.add_water_ripple(self.pos, radius=4.0, max_radius=12.0, color=(200, 160, 255))
 
         # Soft containment inside arena
         if self.pos.x < self.radius:
