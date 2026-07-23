@@ -130,20 +130,21 @@ def boids_alignment(me_vel, neighbors):
 
 # ---------------- Obstacle avoidance blend ----------------
 
-def seek_with_avoid(pos, vel, target, max_speed, radius, rects, lookahead=AVOID_LOOKAHEAD):
+def seek_with_avoid(pos, vel, target, max_speed, radius, rects, lookahead=AVOID_LOOKAHEAD, debug_out=None):
     """
     Seek the target but avoid obstacles by sampling angled corridors.
-    1. Cast a circle along the straight path to the target.
-    2. If clear, return a normal seek force toward the target.
-    3. If blocked, try rotating the direction left and right in increments.
-    4. Seek toward the endpoint of the first clear corridor found.
-    5. If every corridor is blocked, apply a gentle braking force.
+    If debug_out is provided, populates debug_out['rays'] with (start_pos, end_pos, is_blocked)
+    and debug_out['chosen'] with the selected target endpoint.
     """
     d = target - pos
     if d.length_squared() == 0:
         return V2()
     direction = d.normalize()
     base_reach = min(lookahead, d.length())
+
+    if debug_out is not None:
+        debug_out['rays'] = []
+        debug_out['chosen'] = None
 
     # Try different lookahead lengths (base, half, and a very short 42px corridor)
     # to find any escape routes in tight gaps/corners.
@@ -156,7 +157,13 @@ def seek_with_avoid(pos, vel, target, max_speed, radius, rects, lookahead=AVOID_
             heading = direction
 
         # Step 1: check straight corridor to target
-        if not circlecast_hits_any_rect(pos, end_point, radius, rects, ignore_start=True):
+        hit_straight = circlecast_hits_any_rect(pos, end_point, radius, rects, ignore_start=True)
+        if debug_out is not None:
+            debug_out['rays'].append((V2(pos), V2(end_point), hit_straight))
+
+        if not hit_straight:
+            if debug_out is not None:
+                debug_out['chosen'] = V2(target)
             return seek(pos, vel, target, max_speed)
 
         # Step 2-3: try angled corridors relative to current heading up to 96 degrees
@@ -165,16 +172,29 @@ def seek_with_avoid(pos, vel, target, max_speed, radius, rects, lookahead=AVOID_
             # Clockwise
             rot_r = heading.rotate(angle)
             end_r = pos + rot_r * reach
-            if not circlecast_hits_any_rect(pos, end_r, radius, rects, ignore_start=True):
+            hit_r = circlecast_hits_any_rect(pos, end_r, radius, rects, ignore_start=True)
+            if debug_out is not None:
+                debug_out['rays'].append((V2(pos), V2(end_r), hit_r))
+            if not hit_r:
+                if debug_out is not None:
+                    debug_out['chosen'] = V2(end_r)
                 return seek(pos, vel, end_r, max_speed)
+
             # Counter-clockwise
             rot_l = heading.rotate(-angle)
             end_l = pos + rot_l * reach
-            if not circlecast_hits_any_rect(pos, end_l, radius, rects, ignore_start=True):
+            hit_l = circlecast_hits_any_rect(pos, end_l, radius, rects, ignore_start=True)
+            if debug_out is not None:
+                debug_out['rays'].append((V2(pos), V2(end_l), hit_l))
+            if not hit_l:
+                if debug_out is not None:
+                    debug_out['chosen'] = V2(end_l)
                 return seek(pos, vel, end_l, max_speed)
 
     # Step 4: all corridors blocked, steer away from map edges toward center
     center = V2(WIDTH * 0.5, HEIGHT * 0.5)
+    if debug_out is not None:
+        debug_out['chosen'] = V2(center)
     return seek(pos, vel, center, max_speed)
 
 # ---------------- New behaviours to be implemented ----------------

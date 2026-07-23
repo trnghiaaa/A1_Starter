@@ -46,6 +46,9 @@ class Fly:
         self.idle_timer  = 0.0   # time spent far from frog
         self._rng_seed   = random.randint(0, 999999)
 
+        # Debug visualization attributes
+        self.last_steer  = V2()
+
     def sense_bubbles_close(self, bubbles, r):
         """Return True if any bubble is within range r of the fly."""
         for b in bubbles:
@@ -145,6 +148,8 @@ class Fly:
             self.vel += limit(force, 120.0) * dt
             self.vel *= 0.98  # mild damping so idle feels soft
 
+        self.last_steer = V2(force)
+
         # Speed clamp and position integrate
         if self.vel.length() > FLY_SPEED:
             self.vel.scale_to_length(FLY_SPEED)
@@ -163,3 +168,29 @@ class Fly:
     def draw(self, surf):
         color = YELLOW if self.state in (FlyState.Flock, FlyState.Idle) else PURPLE
         pygame.draw.circle(surf, color, self.pos, self.radius)
+
+    def draw_debug(self, surf, flies, font):
+        """Render AI debug visualization overlay for this fly when debug_mode is ON."""
+        # 1. Boids flocking connection lines to nearby neighbors within NEIGHBOR_RADIUS (120px)
+        for f in flies:
+            if f is not self:
+                d2 = (f.pos - self.pos).length_squared()
+                if d2 <= NEIGHBOR_RADIUS ** 2:
+                    pygame.draw.line(surf, (100, 220, 255, 60), self.pos, f.pos, 1)
+
+        # 2. Vectors (Velocity = BLUE, Steering = RED)
+        if self.vel.length_squared() > 0:
+            end_v = self.pos + self.vel * 0.35
+            pygame.draw.line(surf, (80, 160, 255), self.pos, end_v, 2)
+        if self.last_steer.length_squared() > 0:
+            end_s = self.pos + self.last_steer * 0.35
+            pygame.draw.line(surf, (255, 90, 90), self.pos, end_s, 2)
+
+        # 3. State Text Label
+        state_str = f"Fly: {self.state.name}"
+        if self.state == FlyState.Idle and self.idle_timer > 0:
+            state_str += f" ({self.idle_timer:.1f}s)"
+        elif self.state == FlyState.Fleeing and self.scare_timer > 0:
+            state_str += f" ({self.scare_timer:.1f}s)"
+        txt = font.render(state_str, True, (255, 255, 180))
+        surf.blit(txt, (int(self.pos.x - txt.get_width() // 2), int(self.pos.y - self.radius - 16)))

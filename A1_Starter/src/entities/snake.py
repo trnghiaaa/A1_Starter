@@ -112,6 +112,11 @@ class Snake:
         # RNG for wander if needed
         self._rng_seed = random.randint(0, 999999)
 
+        # Debug visualization attributes
+        self.last_steer = V2()
+        self.debug_rays = []
+        self.debug_chosen_target = None
+
     def set_state(self, st):
         """Switch to a new FSM state."""
         if st == SnakeState.Harmless and self.state != SnakeState.Harmless:
@@ -152,9 +157,9 @@ class Snake:
                 self.set_state(SnakeState.Aggro)
 
         elif self.state == SnakeState.Harmless:
-            # When harmless snake reaches home, enter Confused state (3.0s duration)
-            if (self.home - self.pos).length() < 32:
-                self.confused_timer = 2.0  # seconds of confusion
+            # When harmless snake reaches home, enter Confused state (2.0s duration)
+            if (self.home - self.pos).length() < 48:
+                self.confused_timer = 2.0  # 2.0 seconds of confusion
                 self.set_state(SnakeState.Confused)
 
         elif self.state == SnakeState.Confused:
@@ -174,13 +179,13 @@ class Snake:
             self.color = (100, 180, 255)  # Distinct Light Blue
             target = self.patrol_point
             base_steer = arrive(self.pos, self.vel, self.patrol_point, self.speed)
-            if (self.patrol_point - self.pos).length() < 24:
+            if (self.patrol_point - self.pos).length() < 42:
                 self.set_state(SnakeState.PatrolHome)
         elif self.state == SnakeState.PatrolHome:
             self.color = (180, 220, 180)
             target = self.home
             base_steer = arrive(self.pos, self.vel, self.home, self.speed)
-            if (self.home - self.pos).length() < 24:
+            if (self.home - self.pos).length() < 42:
                 self.set_state(SnakeState.PatrolAway)
         elif self.state == SnakeState.Harmless:
             self.color = (210, 130, 255)  # Distinct Light Purple / Violet
@@ -192,6 +197,9 @@ class Snake:
             # Use wide jitter and large circle radius for clear erratic zig-zag wandering
             steer = wander_force(self.vel, jitter_deg=75.0, circle_distance=0.0, circle_radius=70.0, rng_seed=self._rng_seed)
 
+        self.debug_rays = []
+        self.debug_chosen_target = None
+
         if target is not None:
             # Check if straight corridor to the target is blocked
             d = target - self.pos
@@ -199,10 +207,15 @@ class Snake:
             end_point = self.pos + d.normalize() * reach if d.length_squared() > 0 else self.pos
             if circlecast_hits_any_rect(self.pos, end_point, self.radius * 1.1, self.rects, ignore_start=True):
                 # Corridor is blocked: use 100% of the seek_with_avoid steering force with a safety buffer
-                steer = seek_with_avoid(self.pos, self.vel, target, self.speed, self.radius * 1.1, self.rects)
+                debug_out = {}
+                steer = seek_with_avoid(self.pos, self.vel, target, self.speed, self.radius * 1.1, self.rects, debug_out=debug_out)
+                self.debug_rays = debug_out.get('rays', [])
+                self.debug_chosen_target = debug_out.get('chosen', None)
             else:
                 # Corridor is clear: use the state's natural base steer (arrive or pursue)
                 steer = base_steer
+
+        self.last_steer = V2(steer)
 
         # Integrate velocity and update position
         self.vel = integrate_velocity(self.vel, steer, dt, self.speed)
@@ -334,3 +347,50 @@ class Snake:
             ring_surf = pygame.Surface((ring_r * 2 + 6, ring_r * 2 + 6), pygame.SRCALPHA)
             pygame.draw.circle(ring_surf, (160, 235, 255, alpha), (ring_r + 3, ring_r + 3), ring_r, 3)
             surf.blit(ring_surf, (int(self.pos.x - ring_r - 3), int(self.pos.y - ring_r - 3)))
+
+    def draw_debug(self, surf, font):
+        """Render AI debug visualization overlay for this snake when debug_mode is ON."""
+        # 1. Perception circles
+        # Faint RED circle for AGGRO_RANGE (260px)
+        aggro_surf = pygame.Surface((int(AGGRO_RANGE * 2 + 4), int(AGGRO_RANGE * 2 + 4)), pygame.SRCALPHA)
+        pygame.draw.circle(aggro_surf, (232, 88, 88, 55), (int(AGGRO_RANGE + 2), int(AGGRO_RANGE + 2)), int(AGGRO_RANGE), 1)
+        surf.blit(aggro_surf, (int(self.pos.x - AGGRO_RANGE - 2), int(self.pos.y - AGGRO_RANGE - 2)))
+
+        # Faint PURPLE circle for DEAGGRO_RANGE (360px)
+        deaggro_surf = pygame.Surface((int(DEAGGRO_RANGE * 2 + 4), int(DEAGGRO_RANGE * 2 + 4)), pygame.SRCALPHA)
+        pygame.draw.circle(deaggro_surf, (185, 120, 250, 45), (int(DEAGGRO_RANGE + 2), int(DEAGGRO_RANGE + 2)), int(DEAGGRO_RANGE), 1)
+        surf.blit(deaggro_surf, (int(self.pos.x - DEAGGRO_RANGE - 2), int(self.pos.y - DEAGGRO_RANGE - 2)))
+
+        # 2. Patrol lines and waypoints
+        pygame.draw.line(surf, (100, 200, 255, 140), self.pos, self.patrol_point, 1)
+        pygame.draw.line(surf, (180, 230, 180, 140), self.pos, self.home, 1)
+        # Home marker (green diamond)
+        hx, hy = int(self.home.x), int(self.home.y)
+        pygame.draw.polygon(surf, (120, 240, 140), [(hx, hy - 6), (hx + 6, hy), (hx, hy + 6), (hx - 6, hy)])
+        # Patrol marker (cyan diamond)
+        px, py = int(self.patrol_point.x), int(self.patrol_point.y)
+        pygame.draw.polygon(surf, (100, 200, 255), [(px, py - 6), (px + 6, py), (px, py + 6), (px - 6, py)])
+
+        # 3. Obstacle avoidance scan rays
+        for p0, p1, is_blocked in self.debug_rays:
+            col = (255, 60, 60) if is_blocked else (60, 240, 100)
+            pygame.draw.line(surf, col, (int(p0.x), int(p0.y)), (int(p1.x), int(p1.y)), 1)
+        
+        if self.debug_chosen_target is not None:
+            pygame.draw.line(surf, (60, 255, 120), (int(self.pos.x), int(self.pos.y)), (int(self.debug_chosen_target.x), int(self.debug_chosen_target.y)), 2)
+            pygame.draw.circle(surf, (60, 255, 120), (int(self.debug_chosen_target.x), int(self.debug_chosen_target.y)), 4)
+
+        # 4. Vectors (Velocity = BLUE, Steering = RED)
+        if self.vel.length_squared() > 0:
+            end_v = self.pos + self.vel * 0.4
+            pygame.draw.line(surf, (80, 160, 255), self.pos, end_v, 2)
+        if self.last_steer.length_squared() > 0:
+            end_s = self.pos + self.last_steer * 0.4
+            pygame.draw.line(surf, (255, 90, 90), self.pos, end_s, 2)
+
+        # 5. State Text Label
+        state_str = f"Snake: {self.state.name}"
+        if self.state == SnakeState.Confused:
+            state_str += f" ({self.confused_timer:.1f}s)"
+        txt = font.render(state_str, True, (255, 255, 200))
+        surf.blit(txt, (int(self.pos.x - txt.get_width() // 2), int(self.pos.y - self.radius - 22)))
