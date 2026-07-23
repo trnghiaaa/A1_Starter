@@ -82,7 +82,7 @@ def circlecast_hits_any_rect(p0, p1, radius, rects, step=6.0, ignore_start=False
     d = p1 - p0
     length = d.length()
     if length == 0:
-        if circle_outside_bounds(p0, radius):
+        if not ignore_start and circle_outside_bounds(p0, radius):
             return True
     else:
         n = max(1, int(length / step))
@@ -97,3 +97,13 @@ def circlecast_hits_any_rect(p0, p1, radius, rects, step=6.0, ignore_start=False
         if segment_circlecast_hits_rect(p0, p1, radius, r, step, ignore_start):
             return True
     return False
+
+def has_line_of_sight(p0, p1, rects, ray_radius=3.0):
+    """
+    Return True if there is an unobstructed line of sight between p0 and p1.
+    Returns False if any obstacle rectangle blocks the direct vision path.
+    """
+    for r in rects:
+        if segment_circlecast_hits_rect(p0, p1, ray_radius, r, step=4.0, ignore_start=True):
+            return False
+    return True

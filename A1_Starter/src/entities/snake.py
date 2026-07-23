@@ -20,7 +20,7 @@ from settings import (
     SNAKE_RADIUS, SNAKE_SPEED, AGGRO_RANGE, DEAGGRO_RANGE,
     AVOID_LOOKAHEAD
 )
-from utils import circlecast_hits_any_rect, circle_rect_intersect, nearest_point_on_rect
+from utils import circlecast_hits_any_rect, circle_rect_intersect, nearest_point_on_rect, has_line_of_sight
 from steering import arrive, seek, seek_with_avoid, integrate_velocity, pursue, wander_force
 
 class SnakeState(Enum):
@@ -142,7 +142,8 @@ class Snake:
                 self.set_state(SnakeState.PatrolHome)
 
         elif self.state in (SnakeState.PatrolHome, SnakeState.PatrolAway):
-            if dist < AGGRO_RANGE and not frog_hidden:
+            can_see_frog = has_line_of_sight(self.pos, frog.pos, self.rects)
+            if dist < AGGRO_RANGE and not frog_hidden and can_see_frog:
                 self.set_state(SnakeState.Aggro)
 
         elif self.state == SnakeState.Harmless:
@@ -191,7 +192,7 @@ class Snake:
             d = target - self.pos
             reach = min(AVOID_LOOKAHEAD * 1.8, d.length())
             end_point = self.pos + d.normalize() * reach if d.length_squared() > 0 else self.pos
-            if circlecast_hits_any_rect(self.pos, end_point, self.radius * 1.1, self.rects):
+            if circlecast_hits_any_rect(self.pos, end_point, self.radius * 1.1, self.rects, ignore_start=True):
                 # Corridor is blocked: use 100% of the seek_with_avoid steering force with a safety buffer
                 steer = seek_with_avoid(self.pos, self.vel, target, self.speed, self.radius * 1.1, self.rects)
             else:

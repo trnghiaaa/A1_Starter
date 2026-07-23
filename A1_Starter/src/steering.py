@@ -12,6 +12,7 @@ import math, random
 from pygame.math import Vector2 as V2
 from utils import limit, circlecast_hits_any_rect
 from settings import (
+    WIDTH, HEIGHT,
     ARRIVE_SLOW_RADIUS, ARRIVE_STOP_RADIUS,
     AVOID_LOOKAHEAD, AVOID_ANGLE_INCREMENT, AVOID_MAX_ANGLE,
     FLY_SPEED
@@ -155,7 +156,7 @@ def seek_with_avoid(pos, vel, target, max_speed, radius, rects, lookahead=AVOID_
             heading = direction
 
         # Step 1: check straight corridor to target
-        if not circlecast_hits_any_rect(pos, end_point, radius, rects):
+        if not circlecast_hits_any_rect(pos, end_point, radius, rects, ignore_start=True):
             return seek(pos, vel, target, max_speed)
 
         # Step 2-3: try angled corridors relative to current heading up to 96 degrees
@@ -172,8 +173,9 @@ def seek_with_avoid(pos, vel, target, max_speed, radius, rects, lookahead=AVOID_
             if not circlecast_hits_any_rect(pos, end_l, radius, rects, ignore_start=True):
                 return seek(pos, vel, end_l, max_speed)
 
-    # Step 4: all corridors blocked, gentle brake
-    return -vel * 0.5
+    # Step 4: all corridors blocked, steer away from map edges toward center
+    center = V2(WIDTH * 0.5, HEIGHT * 0.5)
+    return seek(pos, vel, center, max_speed)
 
 # ---------------- New behaviours to be implemented ----------------
 
