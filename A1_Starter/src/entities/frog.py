@@ -114,8 +114,40 @@ class Frog:
             t = int(pygame.time.get_ticks() * 0.01) % 2
             color = (220, 220, 220) if t == 0 else (160, 160, 160)
 
-        # Body
-        pygame.draw.circle(surf, color, self.pos, self.radius)
+        # Calculate squash & stretch scales based on speed & arrival deceleration
+        spd = self.vel.length()
+        spd_ratio = min(1.0, spd / self.speed)
+        dist_to_target = (self.target - self.pos).length()
+        is_landing = (dist_to_target < ARRIVE_SLOW_RADIUS and spd_ratio < 0.45 and dist_to_target > ARRIVE_STOP_RADIUS)
+
+        if is_landing:
+            # Landing impact squash (wider perpendicular, flatter along motion)
+            rx = int(self.radius * 1.20)
+            ry = int(self.radius * 0.82)
+        else:
+            # High-speed stretch (longer along motion, narrower perpendicular)
+            rx = int(self.radius * (1.0 + 0.24 * spd_ratio))
+            ry = int(self.radius * (1.0 - 0.18 * spd_ratio))
+
+        rx, ry = max(4, rx), max(4, ry)
+
+        # Create deformed body surface & rotate along facing angle
+        angle_deg = math.degrees(math.atan2(self.facing.y, self.facing.x))
+        max_dim = max(rx, ry) * 2 + 8
+        body_surf = pygame.Surface((max_dim, max_dim), pygame.SRCALPHA)
+        center = (max_dim // 2, max_dim // 2)
+
+        # Ground shadow
+        sh_rect = pygame.Rect(center[0] - rx + 2, center[1] - ry + 3, rx * 2, ry * 2)
+        pygame.draw.ellipse(body_surf, (0, 0, 0, 45), sh_rect)
+        # Deformed body
+        body_rect = pygame.Rect(center[0] - rx, center[1] - ry, rx * 2, ry * 2)
+        pygame.draw.ellipse(body_surf, color, body_rect)
+
+        # Rotate body surface to facing direction
+        rot_surf = pygame.transform.rotate(body_surf, -angle_deg)
+        rot_rect = rot_surf.get_rect(center=(int(self.pos.x), int(self.pos.y)))
+        surf.blit(rot_surf, rot_rect)
 
         # Eye looks in facing direction
         eye = self.pos + self.facing * (self.radius - 4)

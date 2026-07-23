@@ -10,7 +10,7 @@
 #   Compute state transitions from triggers, then apply the behavior for state.
 # ============================================================================
 
-import random
+import random, math
 from enum import Enum, auto
 import pygame
 from pygame.math import Vector2 as V2
@@ -40,6 +40,9 @@ class Fly:
 
         self.radius = FLY_RADIUS
         self.state = FlyState.Flock
+
+        # 3D Flocking depth layer scale
+        self.depth_scale = random.uniform(0.85, 1.15)
 
         # Timers and cached values
         self.scare_timer = 0.0   # counts down while nervous before calming
@@ -167,8 +170,38 @@ class Fly:
             self.pos.y = HEIGHT - self.radius; self.vel.y *= -0.4
 
     def draw(self, surf):
-        color = YELLOW if self.state in (FlyState.Flock, FlyState.Idle) else PURPLE
-        pygame.draw.circle(surf, color, self.pos, self.radius)
+        r = int(self.radius * self.depth_scale)
+        if r < 3: r = 3
+
+        # 1. Ground drop shadow
+        sh_surf = pygame.Surface((r * 2 + 4, r * 2 + 4), pygame.SRCALPHA)
+        pygame.draw.circle(sh_surf, (0, 0, 0, 45), (r + 2, r + 2), r)
+        surf.blit(sh_surf, (int(self.pos.x - r + 2), int(self.pos.y - r + 3)))
+
+        # 2. High-frequency fluttering wings
+        wing_anim = math.sin(pygame.time.get_ticks() * 0.04 + self._rng_seed) * (r * 0.7)
+        if self.vel.length_squared() > 0:
+            side = V2(-self.vel.y, self.vel.x).normalize()
+        else:
+            side = V2(0, 1)
+
+        w1_pos = self.pos + side * (r * 0.7) + V2(0, wing_anim)
+        w2_pos = self.pos - side * (r * 0.7) - V2(0, wing_anim)
+
+        w_surf = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
+        pygame.draw.circle(w_surf, (240, 245, 255, 170), (r + 1, r + 1), int(r * 0.6))
+        surf.blit(w_surf, (int(w1_pos.x - r - 1), int(w1_pos.y - r - 1)))
+        surf.blit(w_surf, (int(w2_pos.x - r - 1), int(w2_pos.y - r - 1)))
+
+        # 3. Main fly body with depth-based color shade
+        base_color = YELLOW if self.state in (FlyState.Flock, FlyState.Idle) else PURPLE
+        shade_factor = 0.85 + (self.depth_scale - 0.85) * 0.5  # foreground flies slightly brighter
+        color = (
+            max(0, min(255, int(base_color[0] * shade_factor))),
+            max(0, min(255, int(base_color[1] * shade_factor))),
+            max(0, min(255, int(base_color[2] * shade_factor)))
+        )
+        pygame.draw.circle(surf, color, (int(self.pos.x), int(self.pos.y)), r)
 
     def draw_debug(self, surf, flies, font):
         """Render AI debug visualization overlay for this fly when debug_mode is ON."""
