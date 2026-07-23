@@ -113,12 +113,15 @@ def main():
     # Build initial state
     world, frog, flies, snakes = reset()
 
-    # Game state for health, scoring, and endings
+    # Game state for health, scoring, timer, and endings
     health = START_HEALTH
     fly_count = 0
     game_over = False
     win = False
     debug_mode = False
+    paused = False
+    elapsed_time = 0.0
+    best_time = None
 
     running = True
     while running:
@@ -139,27 +142,36 @@ def main():
                     # Toggle AI debug visualization overlay
                     debug_mode = not debug_mode
 
-                if not game_over and e.key == pygame.K_SPACE:
+                if e.key == pygame.K_p:
+                    # Toggle game pause modal
+                    paused = not paused
+
+                if not game_over and not paused and e.key == pygame.K_SPACE:
                     # Space shoots a bubble from the frog mouth
                     frog.shoot()
 
-                if game_over and e.key == pygame.K_r:
+                if (game_over or paused) and e.key == pygame.K_r:
                     # R restarts the whole scene
                     world, frog, flies, snakes = reset()
                     health = START_HEALTH
                     fly_count = 0
                     game_over = False
                     win = False
+                    paused = False
+                    elapsed_time = 0.0
                     vfx.reset_combo()
 
-            if not game_over and e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+            if not game_over and not paused and e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
                 # Left click sets a new move target for the frog
                 frog.set_target(pygame.mouse.get_pos())
 
         # ---------------- Update ----------------
-        vfx.update(dt)
+        if not paused:
+            vfx.update(dt)
 
-        if not game_over:
+        if not game_over and not paused:
+            elapsed_time += dt
+
             # Update frog first since other agents may query frog position
             frog.update(dt)
 
@@ -176,6 +188,8 @@ def main():
                     if fly_count >= FLIES_TO_WIN:
                         game_over = True
                         win = True
+                        if best_time is None or elapsed_time < best_time:
+                            best_time = elapsed_time
 
             # Update snakes and their FSM decisions
             for s in snakes:
@@ -277,8 +291,50 @@ def main():
         # Draw fly counter and control hint
         txt = font.render(f"Flies: {fly_count}/{FLIES_TO_WIN}", True, (240, 240, 240))
         render_surf.blit(txt, (16, 42))
-        tips = font.render("Click: move | Space: bubble | V: Debug Mode | R: restart", True, MUTED)
+        tips = font.render("Click: move | Space: bubble | P: Pause | V: Debug | R: restart", True, MUTED)
         render_surf.blit(tips, (16, 68))
+
+        # Render Speedrun Timer (Top Center)
+        mins = int(elapsed_time // 60)
+        secs = elapsed_time % 60
+        timer_str = f"TIME: {mins:02d}:{secs:04.1f}s"
+        timer_txt = font.render(timer_str, True, (240, 240, 240))
+        render_surf.blit(timer_txt, (WIDTH // 2 - timer_txt.get_width() // 2, 16))
+
+        if best_time is not None:
+            bmins = int(best_time // 60)
+            bsecs = best_time % 60
+            best_str = f"BEST: {bmins:02d}:{bsecs:04.1f}s"
+            best_txt = font.render(best_str, True, (255, 220, 90))
+            render_surf.blit(best_txt, (WIDTH // 2 + timer_txt.get_width() // 2 + 20, 16))
+
+        # Pause Overlay Modal
+        if paused and not game_over:
+            p_shade = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            p_shade.fill((0, 0, 0, 175))
+            render_surf.blit(p_shade, (0, 0))
+
+            card_w, card_h = 520, 310
+            card_rect = pygame.Rect(WIDTH // 2 - card_w // 2, HEIGHT // 2 - card_h // 2, card_w, card_h)
+            pygame.draw.rect(render_surf, (35, 42, 50), card_rect, border_radius=16)
+            pygame.draw.rect(render_surf, (100, 200, 255), card_rect, 2, border_radius=16)
+
+            title = bigfont.render("GAME PAUSED", True, (255, 230, 100))
+            render_surf.blit(title, title.get_rect(center=(WIDTH // 2, card_rect.top + 45)))
+
+            controls_info = [
+                "• Left Click : Set Frog Move Target (Arrive)",
+                "• Space Bar  : Shoot Bubble Projectile",
+                "• Key 'P'    : Resume Gameplay",
+                "• Key 'V'    : Toggle AI Debug Overlay",
+                "• Key 'R'    : Restart Simulation",
+            ]
+            for idx, line_str in enumerate(controls_info):
+                line_txt = small_font.render(line_str, True, (220, 230, 240))
+                render_surf.blit(line_txt, (card_rect.left + 40, card_rect.top + 95 + idx * 28))
+
+            resume_hint = font.render("Press P to resume", True, (100, 240, 160))
+            render_surf.blit(resume_hint, resume_hint.get_rect(center=(WIDTH // 2, card_rect.bottom - 35)))
 
         # If game over, dim the screen and show a message
         if game_over:
@@ -289,9 +345,19 @@ def main():
             col = (90, 220, 120) if win else RED
             text = bigfont.render(msg, True, col)
             hint = font.render("Press R to restart", True, (240, 240, 240))
-            rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 10))
+            rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 20))
             render_surf.blit(text, rect)
-            render_surf.blit(hint, hint.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 44)))
+
+            # Show final completion time & best time on win screen
+            if win:
+                win_time_str = f"Time: {mins:02d}:{secs:04.1f}s"
+                if best_time is not None and elapsed_time <= best_time:
+                    win_time_str += " (NEW BEST RECORD!)"
+                time_sub = font.render(win_time_str, True, (255, 230, 100))
+                render_surf.blit(time_sub, time_sub.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 25)))
+                render_surf.blit(hint, hint.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 65)))
+            else:
+                render_surf.blit(hint, hint.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 35)))
 
         # Present the frame with screen shake offset
         ox, oy = vfx.get_shake_offset()

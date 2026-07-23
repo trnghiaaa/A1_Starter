@@ -33,7 +33,14 @@ class World:
             self.obstacles.append(rect)
 
     def draw(self, surf):
-        """Render each obstacle with a fill and a subtle outline."""
+        """Render each obstacle with a fill, safety buffer outline, and a subtle edge."""
         for r in self.obstacles:
+            # Translucent obstacle safety clearance buffer outline
+            buf_r = r.inflate(14, 14)
+            b_surf = pygame.Surface((buf_r.width + 4, buf_r.height + 4), pygame.SRCALPHA)
+            b_rect = pygame.Rect(2, 2, buf_r.width, buf_r.height)
+            pygame.draw.rect(b_surf, (120, 160, 190, 45), b_rect, 2, border_radius=12)
+            surf.blit(b_surf, (buf_r.x - 2, buf_r.y - 2))
+
             pygame.draw.rect(surf, (70, 85, 95), r, border_radius=10)
             pygame.draw.rect(surf, (110, 130, 145), r, 2, border_radius=10)
