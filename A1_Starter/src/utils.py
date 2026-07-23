@@ -168,3 +168,35 @@ def find_corridor_gaps(rects, max_gap_width=120, min_gap_width=42):
                             gaps.append((mid, V2(1, 0), gap_w))
 
     return gaps
+
+def ray_screen_edge_intersection(origin, direction, margin=26):
+    """
+    Calculate the boundary coordinate where a ray from origin along direction
+    hits the screen viewport rectangle [margin, margin, WIDTH - margin, HEIGHT - margin].
+    """
+    if direction.length_squared() == 0:
+        return V2(origin)
+    dir_n = direction.normalize()
+    min_x, max_x = float(margin), float(WIDTH - margin)
+    min_y, max_y = float(margin), float(HEIGHT - margin)
+
+    t_candidates = []
+    if dir_n.x > 1e-5:
+        t_candidates.append((max_x - origin.x) / dir_n.x)
+    elif dir_n.x < -1e-5:
+        t_candidates.append((min_x - origin.x) / dir_n.x)
+
+    if dir_n.y > 1e-5:
+        t_candidates.append((max_y - origin.y) / dir_n.y)
+    elif dir_n.y < -1e-5:
+        t_candidates.append((min_y - origin.y) / dir_n.y)
+
+    valid_t = [t for t in t_candidates if t > 0]
+    if not valid_t:
+        return V2(origin)
+
+    t_hit = min(valid_t)
+    hit_pt = origin + dir_n * t_hit
+    hit_pt.x = clamp(hit_pt.x, min_x, max_x)
+    hit_pt.y = clamp(hit_pt.y, min_y, max_y)
+    return hit_pt

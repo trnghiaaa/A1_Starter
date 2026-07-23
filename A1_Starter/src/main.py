@@ -19,6 +19,53 @@ from entities.fly import Fly
 from entities.snake import Snake, SnakeState
 
 from vfx import VFXManager
+from utils import has_line_of_sight, ray_screen_edge_intersection
+import math
+
+def draw_threat_indicators(surf, frog, snakes, obstacles):
+    """
+    Render tactical screen-edge warning chevrons pointing toward Aggro snakes
+    that are currently off-screen or obscured behind tree obstacles.
+    """
+    for s in snakes:
+        if s.state == SnakeState.Aggro:
+            is_offscreen = (s.pos.x < 35 or s.pos.x > WIDTH - 35 or s.pos.y < 35 or s.pos.y > HEIGHT - 35)
+            is_obscured = not has_line_of_sight(frog.pos, s.pos, obstacles)
+
+            if is_offscreen or is_obscured:
+                d_vec = s.pos - frog.pos
+                dist = d_vec.length()
+                if dist < 1e-3:
+                    continue
+                edge_pos = ray_screen_edge_intersection(frog.pos, d_vec, margin=24)
+
+                # Pulse rate accelerates as snake gets closer
+                pulse_speed = 0.012 + max(0.0, (380 - dist) * 0.00004)
+                t = pygame.time.get_ticks() * pulse_speed
+                size = 11.0 + math.sin(t) * 3.5
+
+                angle_rad = math.atan2(d_vec.y, d_vec.x)
+                fwd = pygame.math.Vector2(math.cos(angle_rad), math.sin(angle_rad))
+                perp = pygame.math.Vector2(-fwd.y, fwd.x)
+
+                p1 = edge_pos + fwd * size
+                p2 = edge_pos - fwd * (size * 0.7) + perp * (size * 0.7)
+                p3 = edge_pos - fwd * (size * 0.7) - perp * (size * 0.7)
+
+                # Render glowing red threat chevron arrow
+                pygame.draw.polygon(surf, (255, 50, 50), [(int(p1.x), int(p1.y)), (int(p2.x), int(p2.y)), (int(p3.x), int(p3.y))])
+                pygame.draw.polygon(surf, (255, 220, 220), [(int(p1.x), int(p1.y)), (int(p2.x), int(p2.y)), (int(p3.x), int(p3.y))], 1)
+
+def create_vignette_surface(w, h):
+    """Pre-render a smooth radial vignette overlay surface with dark red/black edges."""
+    v_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    max_rings = 48
+    for i in range(max_rings):
+        alpha = int(255 * (1.0 - (i / max_rings) ** 0.55))
+        rect = pygame.Rect(i * 2, i * 2, w - i * 4, h - i * 4)
+        if rect.width > 0 and rect.height > 0:
+            pygame.draw.rect(v_surf, (150, 15, 15, alpha), rect, 3, border_radius=16)
+    return v_surf
 
 def main():
     # Initialize Pygame and create a window and a clock
@@ -37,6 +84,9 @@ def main():
 
     # Main render surface for screen shake
     render_surf = pygame.Surface((WIDTH, HEIGHT))
+
+    # Pre-render vignette overlay surface
+    vignette_surf = create_vignette_surface(WIDTH, HEIGHT)
 
     def reset():
         """
@@ -182,6 +232,25 @@ def main():
             s.draw(render_surf)
         frog.draw(render_surf)         # draw frog and bubbles
         vfx.draw(render_surf)          # draw particles and floating text
+
+        # Tactical off-screen/obscured threat warning indicators
+        draw_threat_indicators(render_surf, frog, snakes, world.obstacles)
+
+        # Dynamic Vignette & Danger Screen Tint
+        aggro_dists = [(s.pos - frog.pos).length() for s in snakes if s.state == SnakeState.Aggro]
+        min_aggro_dist = min(aggro_dists) if aggro_dists else 9999.0
+
+        vignette_alpha = 0
+        if health == 1:
+            vignette_alpha += int(55 + math.sin(pygame.time.get_ticks() * 0.006) * 30)
+        if min_aggro_dist < 190.0:
+            prox_ratio = (190.0 - min_aggro_dist) / 190.0
+            vignette_alpha += int(prox_ratio * 165)
+        vignette_alpha = min(210, max(0, vignette_alpha))
+
+        if vignette_alpha > 0:
+            vignette_surf.set_alpha(vignette_alpha)
+            render_surf.blit(vignette_surf, (0, 0))
 
         # ---------------- AI Debug Visualization Overlay ----------------
         if debug_mode:
