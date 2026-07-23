@@ -18,10 +18,10 @@ from pygame.math import Vector2 as V2
 from settings import (
     WIDTH, HEIGHT, WHITE,
     SNAKE_RADIUS, SNAKE_SPEED, AGGRO_RANGE, DEAGGRO_RANGE,
-    AVOID_LOOKAHEAD
+    AVOID_LOOKAHEAD, GAP_MAX_WIDTH, GAP_MIN_WIDTH, GAP_APPROACH_RADIUS
 )
-from utils import circlecast_hits_any_rect, circle_rect_intersect, nearest_point_on_rect, has_line_of_sight
-from steering import arrive, seek, seek_with_avoid, integrate_velocity, pursue, wander_force
+from utils import circlecast_hits_any_rect, circle_rect_intersect, nearest_point_on_rect, has_line_of_sight, find_corridor_gaps
+from steering import arrive, seek, seek_with_avoid, integrate_velocity, pursue, wander_force, seek_through_gap
 
 class SnakeState(Enum):
     PatrolAway = auto()
@@ -116,6 +116,7 @@ class Snake:
         self.last_steer = V2()
         self.debug_rays = []
         self.debug_chosen_target = None
+        self.debug_gap_target = None
 
     def set_state(self, st):
         """Switch to a new FSM state."""
@@ -199,6 +200,7 @@ class Snake:
 
         self.debug_rays = []
         self.debug_chosen_target = None
+        self.debug_gap_target = None
 
         if target is not None:
             # Check if straight corridor to the target is blocked
@@ -206,11 +208,26 @@ class Snake:
             reach = min(AVOID_LOOKAHEAD * 1.8, d.length())
             end_point = self.pos + d.normalize() * reach if d.length_squared() > 0 else self.pos
             if circlecast_hits_any_rect(self.pos, end_point, self.radius * 1.1, self.rects, ignore_start=True):
-                # Corridor is blocked: use 100% of the seek_with_avoid steering force with a safety buffer
-                debug_out = {}
-                steer = seek_with_avoid(self.pos, self.vel, target, self.speed, self.radius * 1.1, self.rects, debug_out=debug_out)
-                self.debug_rays = debug_out.get('rays', [])
-                self.debug_chosen_target = debug_out.get('chosen', None)
+                # Corridor is blocked: try gap corridor navigation first (Aggro only)
+                gap_steer = None
+                if self.state == SnakeState.Aggro:
+                    gap_info = self._find_best_gap_toward(target)
+                    if gap_info is not None:
+                        gap_mid, gap_dir, gap_w = gap_info
+                        self.debug_gap_target = gap_mid
+                        gap_steer = seek_through_gap(
+                            self.pos, self.vel, target, gap_mid,
+                            self.speed, GAP_APPROACH_RADIUS
+                        )
+
+                if gap_steer is not None:
+                    steer = gap_steer
+                else:
+                    # Fallback: use seek_with_avoid steering force with a safety buffer
+                    debug_out = {}
+                    steer = seek_with_avoid(self.pos, self.vel, target, self.speed, self.radius * 1.1, self.rects, debug_out=debug_out)
+                    self.debug_rays = debug_out.get('rays', [])
+                    self.debug_chosen_target = debug_out.get('chosen', None)
             else:
                 # Corridor is clear: use the state's natural base steer (arrive or pursue)
                 steer = base_steer
@@ -285,6 +302,49 @@ class Snake:
             self.history.append(V2(self.pos))
             if len(self.history) > 60:
                 self.history.pop(0)
+
+    def _find_best_gap_toward(self, target):
+        """
+        Scan for narrow corridors between obstacles that lead toward the target.
+        Returns (gap_midpoint, gap_direction, gap_width) for the best gap,
+        or None if no suitable corridor is found.
+        """
+        gaps = find_corridor_gaps(self.rects, GAP_MAX_WIDTH, GAP_MIN_WIDTH)
+        best = None
+        best_score = float('inf')
+
+        to_target = target - self.pos
+        dist_to_target = to_target.length()
+        if dist_to_target < 1e-3:
+            return None
+        target_dir = to_target.normalize()
+
+        for gap_mid, gap_dir, gap_w in gaps:
+            to_gap = gap_mid - self.pos
+            if to_gap.length_squared() < 1e-3:
+                continue
+
+            # Gap must be in the general direction of the target (not behind us)
+            dot = to_gap.normalize().dot(target_dir)
+            if dot < 0.0:
+                continue
+
+            # Gap should be closer to the target than we are (path shortening)
+            dist_gap_to_target = (target - gap_mid).length()
+            if dist_gap_to_target > dist_to_target + 50:
+                continue
+
+            # Must have line-of-sight from snake to the gap entrance
+            if not has_line_of_sight(self.pos, gap_mid, self.rects):
+                continue
+
+            # Score: total two-segment path length through the gap
+            score = to_gap.length() + dist_gap_to_target
+            if score < best_score:
+                best_score = score
+                best = (gap_mid, gap_dir, gap_w)
+
+        return best
 
     def draw(self, surf):
         # 1. Render trailing body segments (from tail to head)
@@ -379,6 +439,12 @@ class Snake:
         if self.debug_chosen_target is not None:
             pygame.draw.line(surf, (60, 255, 120), (int(self.pos.x), int(self.pos.y)), (int(self.debug_chosen_target.x), int(self.debug_chosen_target.y)), 2)
             pygame.draw.circle(surf, (60, 255, 120), (int(self.debug_chosen_target.x), int(self.debug_chosen_target.y)), 4)
+
+        # 3b. Gap corridor navigation target (magenta marker)
+        if self.debug_gap_target is not None:
+            gx, gy = int(self.debug_gap_target.x), int(self.debug_gap_target.y)
+            pygame.draw.polygon(surf, (255, 80, 220), [(gx, gy - 8), (gx + 8, gy), (gx, gy + 8), (gx - 8, gy)])
+            pygame.draw.line(surf, (255, 80, 220), (int(self.pos.x), int(self.pos.y)), (gx, gy), 2)
 
         # 4. Vectors (Velocity = BLUE, Steering = RED)
         if self.vel.length_squared() > 0:

@@ -107,3 +107,64 @@ def has_line_of_sight(p0, p1, rects, ray_radius=3.0):
         if segment_circlecast_hits_rect(p0, p1, ray_radius, r, step=4.0, ignore_start=True):
             return False
     return True
+
+def find_corridor_gaps(rects, max_gap_width=120, min_gap_width=42):
+    """
+    Detect narrow gaps (corridors) between pairs of obstacle rectangles.
+    Checks facing edges for both horizontal and vertical gaps.
+    Returns a list of (gap_midpoint_V2, gap_direction_V2, gap_width) tuples.
+    gap_direction indicates the traversal axis through the corridor.
+    """
+    gaps = []
+    n = len(rects)
+    for i in range(n):
+        for j in range(i + 1, n):
+            A, B = rects[i], rects[j]
+
+            # --- Vertical gap (A above B): corridor runs top-to-bottom ---
+            if A.bottom < B.top:
+                gap_w = B.top - A.bottom
+                if min_gap_width <= gap_w <= max_gap_width:
+                    # Require horizontal overlap between the two rects
+                    ol = max(A.left, B.left)
+                    or_ = min(A.right, B.right)
+                    if or_ > ol:
+                        mid = V2((ol + or_) / 2, (A.bottom + B.top) / 2)
+                        # Ensure gap midpoint is not inside a third obstacle
+                        if not any(rects[k].collidepoint(mid.x, mid.y) for k in range(n) if k != i and k != j):
+                            gaps.append((mid, V2(0, 1), gap_w))
+
+            # --- Vertical gap (B above A) ---
+            if B.bottom < A.top:
+                gap_w = A.top - B.bottom
+                if min_gap_width <= gap_w <= max_gap_width:
+                    ol = max(A.left, B.left)
+                    or_ = min(A.right, B.right)
+                    if or_ > ol:
+                        mid = V2((ol + or_) / 2, (B.bottom + A.top) / 2)
+                        if not any(rects[k].collidepoint(mid.x, mid.y) for k in range(n) if k != i and k != j):
+                            gaps.append((mid, V2(0, 1), gap_w))
+
+            # --- Horizontal gap (A left of B): corridor runs left-to-right ---
+            if A.right < B.left:
+                gap_w = B.left - A.right
+                if min_gap_width <= gap_w <= max_gap_width:
+                    ot = max(A.top, B.top)
+                    ob = min(A.bottom, B.bottom)
+                    if ob > ot:
+                        mid = V2((A.right + B.left) / 2, (ot + ob) / 2)
+                        if not any(rects[k].collidepoint(mid.x, mid.y) for k in range(n) if k != i and k != j):
+                            gaps.append((mid, V2(1, 0), gap_w))
+
+            # --- Horizontal gap (B left of A) ---
+            if B.right < A.left:
+                gap_w = A.left - B.right
+                if min_gap_width <= gap_w <= max_gap_width:
+                    ot = max(A.top, B.top)
+                    ob = min(A.bottom, B.bottom)
+                    if ob > ot:
+                        mid = V2((B.right + A.left) / 2, (ot + ob) / 2)
+                        if not any(rects[k].collidepoint(mid.x, mid.y) for k in range(n) if k != i and k != j):
+                            gaps.append((mid, V2(1, 0), gap_w))
+
+    return gaps

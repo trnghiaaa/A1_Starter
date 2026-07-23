@@ -249,3 +249,32 @@ def wander_force(me_vel, jitter_deg=12.0, circle_distance=24.0, circle_radius=18
     circle_center = heading * circle_distance
     displacement = heading.rotate(_wander_angles[key]) * circle_radius
     return circle_center + displacement
+
+def seek_through_gap(pos, vel, target, gap_midpoint, max_speed, approach_radius=60.0):
+    """
+    Two-phase steering for threading through a narrow gap between obstacles.
+    Phase 1 (Approach): Use arrive() toward gap entrance to decelerate and
+        gradually align the heading toward the corridor opening.
+    Phase 2 (Thread):  Once close and aligned, switch to seek() through
+        the gap toward the final target position.
+    """
+    to_gap = gap_midpoint - pos
+    dist_to_gap = to_gap.length()
+
+    # Phase 2: Close to gap entrance — check alignment before threading through
+    if dist_to_gap <= approach_radius:
+        gap_to_target = target - gap_midpoint
+        if vel.length_squared() > 1e-3 and gap_to_target.length_squared() > 1e-3:
+            heading = vel.normalize()
+            thread_dir = gap_to_target.normalize()
+            alignment = heading.dot(thread_dir)
+            if alignment > 0.5:
+                # Aligned within ~60°: commit through the gap toward the frog
+                return seek(pos, vel, target, max_speed)
+        # Not yet aligned: keep arriving at gap midpoint to correct heading
+        return arrive(pos, vel, gap_midpoint, max_speed * 0.6,
+                      slow_radius=50.0, stop_radius=8.0)
+
+    # Phase 1: Far from gap — arrive toward gap entrance with deceleration
+    return arrive(pos, vel, gap_midpoint, max_speed * 0.85,
+                  slow_radius=80.0, stop_radius=12.0)

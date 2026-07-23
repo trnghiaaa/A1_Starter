@@ -66,6 +66,11 @@ AVOID_LOOKAHEAD       = 260.0   # how far the snake looks ahead when checking a 
 AVOID_ANGLE_INCREMENT = 12      # degrees to rotate per step when searching for a free path
 AVOID_MAX_ANGLE       = 84      # maximum deviation to try on either side
 
+# Gap corridor navigation tuning
+GAP_MAX_WIDTH       = 120        # max pixel gap between obstacle edges to count as a corridor
+GAP_MIN_WIDTH       = 42         # min gap width (snake must fit through: ~2 * SNAKE_RADIUS)
+GAP_APPROACH_RADIUS = 60.0       # distance at which snake switches from arrive to threading
+
 # Game rules
 START_HEALTH = 3                 # how many hits the frog can take
 FLIES_TO_WIN = 10                # win condition counter
