@@ -100,6 +100,7 @@ def main():
                     fly_count = 0
                     game_over = False
                     win = False
+                    vfx.reset_combo()
 
             if not game_over and e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
                 # Left click sets a new move target for the frog
@@ -113,12 +114,13 @@ def main():
             frog.update(dt)
 
             # Update flies and check if any fly gets caught by the frog
+            current_time = pygame.time.get_ticks() / 1000.0
             for f in list(flies):
                 f.update(dt, flies, frog, world.rect, frog.bubbles)
 
                 # Eat a fly when close enough to the frog center
                 if (f.pos - frog.pos).length_squared() <= (f.radius + FROG_RADIUS) ** 2:
-                    vfx.add_eat_fly(f.pos)
+                    vfx.add_eat_fly(f.pos, current_time=current_time)
                     flies.remove(f)
                     fly_count += 1
                     if fly_count >= FLIES_TO_WIN:
@@ -170,6 +172,9 @@ def main():
         render_surf.fill(BG)           # clear background
         draw_grid(render_surf)         # draw a soft grid
         world.draw(render_surf)        # draw obstacles
+
+        # Tactical overlay (Target destination marker)
+        frog.draw_target_marker(render_surf)
 
         for f in flies:                # draw flies
             f.draw(render_surf)

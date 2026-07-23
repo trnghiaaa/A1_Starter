@@ -106,6 +106,10 @@ class Snake:
         # Bounce visual effect timer
         self.bounce_timer = 0.0
 
+        # Threat telegraphing timers (Forked tongue flick and Aggro lock-on shockwave)
+        self.tongue_timer = random.uniform(-1.8, 0.0)
+        self.aggro_flash_timer = 0.0
+
         # Position history for rendering slithering trailing body segments
         self.history = [V2(self.pos) for _ in range(60)]
 
@@ -118,8 +122,14 @@ class Snake:
         self.debug_chosen_target = None
         self.debug_gap_target = None
 
-    def set_state(self, st):
+    def set_state(self, st, vfx=None):
         """Switch to a new FSM state."""
+        if st == SnakeState.Aggro and self.state != SnakeState.Aggro:
+            # Trigger Aggro lock-on threat flash & hiss particles
+            self.aggro_flash_timer = 0.4
+            if vfx:
+                vfx.add_aggro_hiss(self.pos)
+
         if st == SnakeState.Harmless and self.state != SnakeState.Harmless:
             # Instantly redirect velocity toward home for a swift, responsive turn
             d = self.home - self.pos
@@ -137,6 +147,14 @@ class Snake:
         if self.bounce_timer > 0:
             self.bounce_timer -= dt
 
+        if self.aggro_flash_timer > 0:
+            self.aggro_flash_timer -= dt
+
+        # Update tongue flick timer
+        self.tongue_timer -= dt
+        if self.tongue_timer <= -2.4:
+            self.tongue_timer = 0.35  # flick tongue for 0.35s
+
         # Distance to frog for transitions
         dist = (frog.pos - self.pos).length()
 
@@ -150,23 +168,23 @@ class Snake:
         # ---------------- FSM transitions ----------------
         if self.state == SnakeState.Aggro:
             if dist > DEAGGRO_RANGE or frog_hidden:
-                self.set_state(SnakeState.PatrolHome)
+                self.set_state(SnakeState.PatrolHome, vfx)
 
         elif self.state in (SnakeState.PatrolHome, SnakeState.PatrolAway):
             can_see_frog = has_line_of_sight(self.pos, frog.pos, self.rects)
             if dist < AGGRO_RANGE and not frog_hidden and can_see_frog:
-                self.set_state(SnakeState.Aggro)
+                self.set_state(SnakeState.Aggro, vfx)
 
         elif self.state == SnakeState.Harmless:
             # When harmless snake reaches home, enter Confused state (2.0s duration)
             if (self.home - self.pos).length() < 48:
                 self.confused_timer = 2.0  # 2.0 seconds of confusion
-                self.set_state(SnakeState.Confused)
+                self.set_state(SnakeState.Confused, vfx)
 
         elif self.state == SnakeState.Confused:
             self.confused_timer -= dt
             if self.confused_timer <= 0:
-                self.set_state(SnakeState.PatrolAway)
+                self.set_state(SnakeState.PatrolAway, vfx)
 
         # ---------------- State behaviours ----------------
         if self.state == SnakeState.Aggro:
@@ -377,22 +395,46 @@ class Snake:
         # 2. Render head
         pygame.draw.circle(surf, self.color, (int(self.pos.x), int(self.pos.y)), int(self.radius))
 
-        # 3. Render dual eyes oriented along heading direction
         heading_rad = math.radians(self.heading_deg)
         forward = V2(math.cos(heading_rad), math.sin(heading_rad))
         right = V2(-forward.y, forward.x)
 
+        # 3. Render forked tongue flick (when active and not Confused)
+        if self.tongue_timer > 0 and self.state != SnakeState.Confused:
+            stem_start = self.pos + forward * (self.radius + 1)
+            stem_end = self.pos + forward * (self.radius + 12)
+            fork_l = stem_end + forward * 4 + right * (-3.5)
+            fork_r = stem_end + forward * 4 + right * 3.5
+
+            tongue_col = (245, 50, 60)
+            pygame.draw.line(surf, tongue_col, (int(stem_start.x), int(stem_start.y)), (int(stem_end.x), int(stem_end.y)), 2)
+            pygame.draw.line(surf, tongue_col, (int(stem_end.x), int(stem_end.y)), (int(fork_l.x), int(fork_l.y)), 2)
+            pygame.draw.line(surf, tongue_col, (int(stem_end.x), int(stem_end.y)), (int(fork_r.x), int(fork_r.y)), 2)
+
+        # 4. Render dual eyes oriented along heading direction (glowing red during Aggro)
         eye_offset_fwd = self.radius * 0.50
         eye_offset_side = self.radius * 0.42
 
         left_eye = self.pos + forward * eye_offset_fwd + right * eye_offset_side
         right_eye = self.pos + forward * eye_offset_fwd - right * eye_offset_side
 
-        for eye_pos in [left_eye, right_eye]:
-            pygame.draw.circle(surf, (20, 20, 20), (int(eye_pos.x), int(eye_pos.y)), 3)
-            pygame.draw.circle(surf, WHITE, (int(eye_pos.x), int(eye_pos.y)), 4, 1)
+        pupil_col = (245, 40, 40) if self.state == SnakeState.Aggro else (20, 20, 20)
+        ring_col = (255, 140, 80) if self.state == SnakeState.Aggro else WHITE
 
-        # 4. Render spinning dizzy stars when in Confused state
+        for eye_pos in [left_eye, right_eye]:
+            pygame.draw.circle(surf, pupil_col, (int(eye_pos.x), int(eye_pos.y)), 3)
+            pygame.draw.circle(surf, ring_col, (int(eye_pos.x), int(eye_pos.y)), 4, 1)
+
+        # 5. Render Aggro lock-on threat flash shockwave ring
+        if self.aggro_flash_timer > 0:
+            progress = max(0.0, min(1.0, self.aggro_flash_timer / 0.4))
+            ring_r = int(self.radius + (1.0 - progress) * 26)
+            alpha = int(240 * progress)
+            flash_surf = pygame.Surface((ring_r * 2 + 6, ring_r * 2 + 6), pygame.SRCALPHA)
+            pygame.draw.circle(flash_surf, (255, 60, 60, alpha), (ring_r + 3, ring_r + 3), ring_r, 3)
+            surf.blit(flash_surf, (int(self.pos.x - ring_r - 3), int(self.pos.y - ring_r - 3)))
+
+        # 6. Render spinning dizzy stars when in Confused state
         if self.state == SnakeState.Confused:
             t = pygame.time.get_ticks() * 0.007
             center_star = self.pos + V2(0, -self.radius - 14)
@@ -403,7 +445,7 @@ class Snake:
                 pygame.draw.circle(surf, (255, 230, 90), (int(sx), int(sy)), 3)
                 pygame.draw.circle(surf, (200, 150, 20), (int(sx), int(sy)), 3, 1)
 
-        # 5. Render expanding elastic shockwave ripple ring when bouncing off an obstacle
+        # 7. Render expanding elastic shockwave ripple ring when bouncing off an obstacle
         if self.bounce_timer > 0:
             progress = max(0.0, min(1.0, self.bounce_timer / 0.35))
             ring_r = int(self.radius + (1.0 - progress) * 22)

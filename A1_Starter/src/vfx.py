@@ -81,6 +81,15 @@ class VFXManager:
         self.floating_texts = []
         self.screen_shake = 0.0
         self.font = font
+        # Combo tracking
+        self.combo_count = 0
+        self.last_eat_time = -999.0
+        self.combo_window = 1.5  # seconds within which consecutive catches form a combo
+
+    def reset_combo(self):
+        """Reset fly catch combo multiplier."""
+        self.combo_count = 0
+        self.last_eat_time = -999.0
 
     def update(self, dt):
         if self.screen_shake > 0:
@@ -119,16 +128,33 @@ class VFXManager:
             lifetime = random.uniform(0.2, 0.45)
             self.particles.append(Particle(pos, vel, color, radius, lifetime))
 
-    def add_eat_fly(self, pos):
+    def add_eat_fly(self, pos, current_time=0.0):
+        # Update combo status
+        if current_time - self.last_eat_time <= self.combo_window:
+            self.combo_count += 1
+        else:
+            self.combo_count = 1
+        self.last_eat_time = current_time
+
+        # Floating text feedback
         if self.font:
-            self.floating_texts.append(FloatingText(pos, "+1", color=(255, 240, 100), font=self.font))
-        for _ in range(8):
+            if self.combo_count >= 2:
+                msg = f"{self.combo_count}x COMBO!"
+                txt_color = (100, 240, 255) if self.combo_count % 2 == 0 else (255, 220, 80)
+                self.floating_texts.append(FloatingText(pos, msg, color=txt_color, font=self.font))
+                self.trigger_shake(0.12)
+            else:
+                self.floating_texts.append(FloatingText(pos, "+1", color=(255, 240, 100), font=self.font))
+
+        # Particle burst scaled by combo level
+        particle_count = 8 + min(12, (self.combo_count - 1) * 6)
+        for _ in range(particle_count):
             angle = random.uniform(0, math.pi * 2)
-            spd = random.uniform(30, 130)
+            spd = random.uniform(40, 160 + self.combo_count * 20)
             vel = V2(math.cos(angle) * spd, math.sin(angle) * spd)
-            color = random.choice([(255, 230, 100), (160, 235, 120), (255, 255, 200)])
-            radius = random.uniform(2.0, 4.5)
-            lifetime = random.uniform(0.25, 0.5)
+            color = random.choice([(255, 230, 100), (100, 240, 255), (160, 235, 120), (255, 255, 200)])
+            radius = random.uniform(2.0, 5.5)
+            lifetime = random.uniform(0.25, 0.55)
             self.particles.append(Particle(pos, vel, color, radius, lifetime))
 
     def add_hurt_impact(self, pos):
@@ -152,4 +178,15 @@ class VFXManager:
             color = random.choice([(255, 255, 255), (140, 220, 255), (255, 230, 110)])
             radius = random.uniform(2.5, 4.5)
             lifetime = random.uniform(0.15, 0.35)
+            self.particles.append(Particle(pos, vel, color, radius, lifetime))
+
+    def add_aggro_hiss(self, pos):
+        """Spawns alert hiss particles when snake detects the frog and enters Aggro state."""
+        for _ in range(9):
+            angle = random.uniform(0, math.pi * 2)
+            spd = random.uniform(50, 190)
+            vel = V2(math.cos(angle) * spd, math.sin(angle) * spd)
+            color = random.choice([(255, 60, 60), (255, 140, 40), (255, 220, 100)])
+            radius = random.uniform(2.5, 5.0)
+            lifetime = random.uniform(0.2, 0.4)
             self.particles.append(Particle(pos, vel, color, radius, lifetime))

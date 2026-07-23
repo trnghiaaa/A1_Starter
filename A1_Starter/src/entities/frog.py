@@ -10,6 +10,7 @@
 # ============================================================================
 
 # (no wall-clock imports needed — all timing uses dt)
+import math
 import pygame
 from pygame.math import Vector2 as V2
 from settings import (
@@ -124,6 +125,20 @@ class Frog:
         # Bubbles
         for b in self.bubbles:
             b.draw(surf)
+
+    def draw_target_marker(self, surf):
+        """Render a subtle pulsing lily pad target marker at destination until frog arrives."""
+        dist = (self.target - self.pos).length()
+        if dist > ARRIVE_STOP_RADIUS + 4:
+            tx, ty = int(self.target.x), int(self.target.y)
+            t = pygame.time.get_ticks() * 0.005
+            pulse_r = int(12 + math.sin(t) * 3)
+            
+            # Soft translucent ring
+            ring_surf = pygame.Surface((pulse_r * 2 + 4, pulse_r * 2 + 4), pygame.SRCALPHA)
+            pygame.draw.circle(ring_surf, (100, 240, 150, 110), (pulse_r + 2, pulse_r + 2), pulse_r, 2)
+            pygame.draw.circle(ring_surf, (100, 240, 150, 180), (pulse_r + 2, pulse_r + 2), 3)
+            surf.blit(ring_surf, (tx - pulse_r - 2, ty - pulse_r - 2))
 
     def draw_debug(self, surf, font):
         """Render AI debug visualization overlay for the Frog when debug_mode is ON."""
