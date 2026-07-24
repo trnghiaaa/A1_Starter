@@ -58,6 +58,7 @@ class Frog:
 
         # Ripple trail timer
         self.ripple_timer = 0.0
+        self.was_moving = False
 
         # Debug visualization attributes
         self.last_steer = V2()
@@ -92,8 +93,14 @@ class Frog:
         # Move the frog
         self.pos += self.vel * dt
 
+        is_moving = self.vel.length_squared() > 400
+        # Trigger splash droplets when landing at move target
+        if self.was_moving and not is_moving and vfx:
+            vfx.add_landing_splash(self.pos)
+        self.was_moving = is_moving
+
         # Spawn water ripple trail when moving
-        if vfx and self.vel.length_squared() > 1600:
+        if vfx and is_moving:
             self.ripple_timer -= dt
             if self.ripple_timer <= 0:
                 vfx.add_water_ripple(self.pos, radius=10.0, max_radius=22.0, color=(140, 230, 170))

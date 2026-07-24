@@ -12,7 +12,7 @@
 import sys, random
 import pygame
 from settings import *
-from utils import draw_grid
+from utils import draw_grid, circle_rect_intersect
 from world import World
 from entities.frog import Frog
 from entities.fly import Fly
@@ -177,19 +177,23 @@ def main():
 
             # Update flies and check if any fly gets caught by the frog
             current_time = pygame.time.get_ticks() / 1000.0
-            for f in list(flies):
+            eaten = []
+            for f in flies:
                 f.update(dt, flies, frog, world.rect, frog.bubbles, vfx)
 
                 # Eat a fly when close enough to the frog center
                 if (f.pos - frog.pos).length_squared() <= (f.radius + FROG_RADIUS) ** 2:
                     vfx.add_eat_fly(f.pos, current_time=current_time)
-                    flies.remove(f)
+                    f.trigger_swarm_alarm(flies, vfx)
+                    eaten.append(f)
                     fly_count += 1
                     if fly_count >= FLIES_TO_WIN:
                         game_over = True
                         win = True
                         if best_time is None or elapsed_time < best_time:
                             best_time = elapsed_time
+            for f in eaten:
+                flies.remove(f)
 
             # Update snakes and their FSM decisions
             for s in snakes:
@@ -208,7 +212,6 @@ def main():
                         b.alive = False
 
             # Check bubble collisions with static obstacles (boxes)
-            from utils import circle_rect_intersect
             for b in frog.bubbles:
                 if b.alive:
                     for r in world.obstacles:

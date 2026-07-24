@@ -59,6 +59,17 @@ class Fly:
                 return True
         return False
 
+    def trigger_swarm_alarm(self, flies, vfx=None):
+        """Alert neighboring flies in the swarm within perception radius."""
+        if vfx:
+            vfx.add_swarm_alarm_pulse(self.pos, radius=110.0)
+        alarm_sq = 110.0 * 110.0
+        for other in flies:
+            if other != self and other.state != FlyState.Fleeing:
+                if (other.pos - self.pos).length_squared() <= alarm_sq:
+                    other.state = FlyState.Fleeing
+                    other.scare_timer = 0.6
+
     def update(self, dt, flies, frog, bounds_rect, bubbles, vfx=None):
         """
         Update FSM and behavior. Flies use perception to switch states.
@@ -74,7 +85,7 @@ class Fly:
         BubbleFleeRange = 140.0      # panic if bubble comes within this range
         StopFleeingRange = 220.0     # calm down when both frog and bubbles are beyond this
         IdleDistance = 380.0         # far enough to consider idling
-        IdleDelay    = 2.0           # seconds of safety before entering Idle
+        IdleDelay    = 3.0           # seconds of continuous calm needed before idling
 
         # Triggers based on the frog and bubbles
         dist_to_frog = (frog.pos - self.pos).length()
@@ -86,6 +97,7 @@ class Fly:
             if scared_by_frog or scared_by_bubble:
                 self.state = FlyState.Fleeing
                 self.scare_timer = 0.6
+                self.trigger_swarm_alarm(flies, vfx)
             else:
                 # Build idle time only when calm and far
                 if dist_to_frog > IdleDistance:
@@ -109,6 +121,7 @@ class Fly:
             if scared_by_frog or scared_by_bubble:
                 self.state = FlyState.Fleeing
                 self.scare_timer = 0.6
+                self.trigger_swarm_alarm(flies, vfx)
             elif dist_to_frog <= IdleDistance:
                 self.state = FlyState.Flock
                 self.idle_timer = 0.0
@@ -118,10 +131,11 @@ class Fly:
         if self.state == FlyState.Flock:
             # Build neighbor list for boids
             neighbors = []
+            nr_sq = NEIGHBOR_RADIUS * NEIGHBOR_RADIUS
             for f in flies:
                 if f is self:
                     continue
-                if (f.pos - self.pos).length_squared() <= NEIGHBOR_RADIUS ** 2:
+                if (f.pos - self.pos).length_squared() <= nr_sq:
                     neighbors.append((f.pos, f.vel))
 
             # Compute boids forces: separation, cohesion, alignment

@@ -234,3 +234,18 @@ class VFXManager:
             radius = random.uniform(2.5, 5.0)
             lifetime = random.uniform(0.2, 0.4)
             self.particles.append(Particle(pos, vel, color, radius, lifetime))
+
+    def add_landing_splash(self, pos):
+        """Spawns a water droplet splash burst when frog finishes an Arrive hop and lands."""
+        for _ in range(8):
+            angle = random.uniform(0, math.pi * 2)
+            spd = random.uniform(40, 150)
+            vel = V2(math.cos(angle) * spd, math.sin(angle) * spd)
+            color = random.choice([(160, 225, 255), (200, 245, 255), (120, 205, 240)])
+            radius = random.uniform(2.0, 4.5)
+            lifetime = random.uniform(0.18, 0.36)
+            self.particles.append(Particle(pos, vel, color, radius, lifetime))
+
+    def add_swarm_alarm_pulse(self, pos, radius=110.0):
+        """Spawns a translucent purple expanding perception ring particle for fly swarm alarm waves."""
+        self.ripples.append(RippleParticle(pos, start_radius=10.0, max_radius=radius, color=(210, 140, 255), lifetime=0.36))

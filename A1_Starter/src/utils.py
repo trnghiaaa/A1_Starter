@@ -34,11 +34,12 @@ def clamp(x, a, b):
 def limit(v, max_len):
     """
     Limit a vector length.
-    If v is longer than max_len, scale it down to exactly max_len.
+    If v is longer than max_len, return a scaled-down copy at exactly max_len.
+    Does NOT mutate the original vector.
     """
     if v.length_squared() > max_len * max_len:
-        v.scale_to_length(max_len)
-    return v
+        return v.normalize() * max_len
+    return V2(v)
 
 def nearest_point_on_rect(point, rect):
     """Return the closest point on an axis aligned rectangle to a given point."""

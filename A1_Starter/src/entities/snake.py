@@ -268,7 +268,6 @@ class Snake:
                 self.ripple_timer = 0.16
 
         # Resolve collisions with static obstacles (pop out instantly)
-        from utils import nearest_point_on_rect
         for r in self.rects:
             np = nearest_point_on_rect(self.pos, r)
             diff = self.pos - np
