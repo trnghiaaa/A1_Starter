@@ -22,7 +22,7 @@ from settings import (
 from utils import limit
 from steering import (
     boids_separation, boids_cohesion, boids_alignment,
-    flee, evade, wander_force
+    evade, wander_force
 )
 
 class FlyState(Enum):
@@ -152,8 +152,16 @@ class Fly:
             self.vel += limit(force, 240.0) * dt
 
         elif self.state == FlyState.Fleeing:
-            # Replace simple flee with predictive evade for extra credit
+            # Predictive evade (Part 3B) replaces basic flee with prediction
             force = evade(self.pos, self.vel, frog.pos, frog.vel, FLY_SPEED)
+
+            # Separation so panicked flies scatter apart instead of clumping
+            neighbors = []
+            nr_sq = NEIGHBOR_RADIUS * NEIGHBOR_RADIUS
+            for f in flies:
+                if f is not self and (f.pos - self.pos).length_squared() <= nr_sq:
+                    neighbors.append((f.pos, f.vel))
+            force += boids_separation(self.pos, neighbors, sep_radius=50.0) * (SEP_WEIGHT * 0.5)
 
             # Anchor blend so the group does not disappear off screen
             center = V2(bounds_rect.centerx, bounds_rect.centery)
