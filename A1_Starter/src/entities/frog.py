@@ -91,8 +91,8 @@ class Frog:
         else:
             # Compute steering with Arrive
             steer = arrive(self.pos, self.vel, self.target, self.speed, dt=dt)
-            # Integrate velocity with dt and clamp to max speed
-            self.vel = integrate_velocity(self.vel, steer, dt, self.speed)
+            # Cap acceleration (max_force=320.0) so frog speeds up smoothly and turns with natural weight
+            self.vel = integrate_velocity(self.vel, steer, dt, self.speed, max_force=320.0)
             # Move the frog
             self.pos += self.vel * dt
 

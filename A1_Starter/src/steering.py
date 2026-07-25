@@ -49,7 +49,7 @@ def arrive(pos, vel, target, max_speed, slow_radius=ARRIVE_SLOW_RADIUS, stop_rad
     Like seek when far, but slow down with kinematic square-root deceleration near target.
     Rules:
       If distance <= stop_radius, return a force that cancels leftover velocity (-vel / dt).
-      If distance < slow_radius, use sqrt deceleration (v = sqrt(2*a*d)) and braking gain to stop cleanly at target.
+      If distance < slow_radius, use sqrt deceleration (v = sqrt(2*a*d)) and moderate braking gain to stop cleanly.
       Otherwise use full speed.
     """
     d = target - pos
@@ -65,18 +65,18 @@ def arrive(pos, vel, target, max_speed, slow_radius=ARRIVE_SLOW_RADIUS, stop_rad
         # Square-root deceleration curve matching physical braking (v = sqrt(2*a*d))
         speed_factor = math.sqrt(t)
         desired = d.normalize() * max_speed * speed_factor
-        # Apply 3.5x braking gain so velocity decelerates fast enough to prevent overshoot
-        return (desired - vel) * 3.5
+        # Moderate braking gain (2.2x) for smooth stopping without overriding turn weight
+        return (desired - vel) * 2.2
     else:
         desired = d.normalize() * max_speed
         return desired - vel
 
-def integrate_velocity(vel, force, dt, max_speed, max_force=2000.0):
+def integrate_velocity(vel, force, dt, max_speed, max_force=650.0):
     """
     Apply a steering force to velocity using Euler integration.
     Then clamp to max speed and return the new velocity.
     Use this inside agent update methods after computing steering forces.
-    max_force caps the steering force magnitude to prevent explosive acceleration.
+    max_force caps the steering force magnitude to provide natural turning inertia.
     """
     vel += limit(force, max_force) * dt
     if vel.length() > max_speed:
