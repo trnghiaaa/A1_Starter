@@ -17,7 +17,7 @@ from pygame.math import Vector2 as V2
 from settings import (
     WIDTH, HEIGHT, WHITE, YELLOW, PURPLE,
     FLY_RADIUS, FLY_SPEED, NEIGHBOR_RADIUS,
-    SEP_WEIGHT, COH_WEIGHT, ALI_WEIGHT, ANCHOR_WEIGHT
+    SEP_WEIGHT, FLEE_SEP_WEIGHT, COH_WEIGHT, ALI_WEIGHT, ANCHOR_WEIGHT
 )
 from utils import limit
 from steering import (
@@ -51,6 +51,14 @@ class Fly:
 
         # Debug visualization attributes
         self.last_steer  = V2()
+
+    def get_neighbors(self, flies, radius=NEIGHBOR_RADIUS):
+        """Return list of (pos, vel) for all other flies within perception radius."""
+        r_sq = radius * radius
+        return [
+            (other.pos, other.vel) for other in flies
+            if other is not self and (other.pos - self.pos).length_squared() <= r_sq
+        ]
 
     def sense_bubbles_close(self, bubbles, r):
         """Return True if any bubble is within range r of the fly."""
@@ -129,14 +137,7 @@ class Fly:
         # ---------------- State behaviours ----------------
         force = V2()  # default zero force; overwritten by each state branch
         if self.state == FlyState.Flock:
-            # Build neighbor list for boids
-            neighbors = []
-            nr_sq = NEIGHBOR_RADIUS * NEIGHBOR_RADIUS
-            for f in flies:
-                if f is self:
-                    continue
-                if (f.pos - self.pos).length_squared() <= nr_sq:
-                    neighbors.append((f.pos, f.vel))
+            neighbors = self.get_neighbors(flies)
 
             # Compute boids forces: separation, cohesion, alignment
             sep = boids_separation(self.pos, neighbors, sep_radius=50.0)
@@ -155,13 +156,9 @@ class Fly:
             # Predictive evade (Part 3B) replaces basic flee with prediction
             force = evade(self.pos, self.vel, frog.pos, frog.vel, FLY_SPEED)
 
-            # Separation so panicked flies scatter apart instead of clumping
-            neighbors = []
-            nr_sq = NEIGHBOR_RADIUS * NEIGHBOR_RADIUS
-            for f in flies:
-                if f is not self and (f.pos - self.pos).length_squared() <= nr_sq:
-                    neighbors.append((f.pos, f.vel))
-            force += boids_separation(self.pos, neighbors, sep_radius=50.0) * (SEP_WEIGHT * 0.5)
+            # Separation so panicked flies scatter apart instead of clumping, using FLEE_SEP_WEIGHT
+            neighbors = self.get_neighbors(flies)
+            force += boids_separation(self.pos, neighbors, sep_radius=50.0) * FLEE_SEP_WEIGHT
 
             # Anchor blend so the group does not disappear off screen
             center = V2(bounds_rect.centerx, bounds_rect.centery)

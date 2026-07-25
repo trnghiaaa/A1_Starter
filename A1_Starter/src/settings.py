@@ -42,7 +42,8 @@ FLY_SPEED  = 120.0        # fly max speed
 # These determine how flies react to neighbors
 NEIGHBOR_RADIUS = 120.0   # how far a fly considers other flies as neighbors
 SEP_RADIUS      = 50.0    # separation threshold distance
-SEP_WEIGHT      = 1.9     # weight for separation force
+SEP_WEIGHT      = 1.9     # weight for separation force when flocking
+FLEE_SEP_WEIGHT = 0.5     # weight for separation force when fleeing (prioritizes evade)
 COH_WEIGHT      = 0.9     # weight for cohesion force
 ALI_WEIGHT      = 0.8     # weight for alignment force
 ANCHOR_WEIGHT   = 0.6     # small pull to arena center to keep flock on screen
