@@ -1,61 +1,47 @@
-# ============================================================================
-# utils.py
-# Purpose
-#   Small helper functions that do not belong to a specific agent.
-#   Drawing helpers and collision checks live here.
-# Notes
-#   None of these helpers should change game rules or AI decisions.
-# ============================================================================
-
 import pygame
 from pygame.math import Vector2 as V2
 from settings import WIDTH, HEIGHT
 
-# A soft grid color for the background
+# Background grid visual styling
 GRID = (36, 42, 48)
 
 def draw_grid(surf):
-    """
-    Draw a light grid to help the eye judge motion and distance.
-    The grid has no effect on gameplay. It is only visual.
-    """
-    gap = 36  # distance between grid lines
-    # Draw vertical lines
+    """Draw a soft background grid overlay for spatial perception."""
+    gap = 36  # Distance between grid lines in pixels
     for x in range(0, WIDTH, gap):
         pygame.draw.line(surf, GRID, (x, 0), (x, HEIGHT))
-    # Draw horizontal lines
     for y in range(0, HEIGHT, gap):
         pygame.draw.line(surf, GRID, (0, y), (WIDTH, y))
 
 def clamp(x, a, b):
-    """Limit a scalar value x so it stays between a and b inclusive."""
+    """Clamp scalar value x within range [a, b]."""
     return max(a, min(b, x))
 
 def limit(v, max_len):
     """
-    Limit a vector length.
-    If v is longer than max_len, return a scaled-down copy at exactly max_len.
-    Does NOT mutate the original vector.
+    Limit vector length to max_len.
+    Returns a copy scaled down to max_len if it exceeds max_len.
+    Does not mutate the input vector.
     """
     if v.length_squared() > max_len * max_len:
         return v.normalize() * max_len
     return V2(v)
 
 def nearest_point_on_rect(point, rect):
-    """Return the closest point on an axis aligned rectangle to a given point."""
+    """Return the nearest point on an axis-aligned rectangle to a target point."""
     x = clamp(point.x, rect.left, rect.right)
     y = clamp(point.y, rect.top, rect.bottom)
     return V2(x, y)
 
 def circle_rect_intersect(center, radius, rect):
-    """Return True if a circle touches or overlaps a rectangle."""
+    """Return True if a circle intersects or overlaps an axis-aligned rectangle."""
     np = nearest_point_on_rect(center, rect)
     return (center - np).length_squared() <= radius * radius
 
 def segment_circlecast_hits_rect(p0, p1, radius, rect, step=6.0, ignore_start=False):
     """
-    Approximate a circle cast along a line from p0 to p1.
-    We sample points along the segment and test a circle intersect at each step.
+    Swept circle collision test along segment [p0, p1] against a rectangle.
+    Samples test points along the line segment at step intervals.
     """
     d = p1 - p0
     length = d.length()
@@ -71,15 +57,14 @@ def segment_circlecast_hits_rect(p0, p1, radius, rect, step=6.0, ignore_start=Fa
     return False
 
 def circle_outside_bounds(center, radius):
-    """Return True if a circle with the given center and radius goes outside the screen."""
+    """Return True if a circle intersects or exceeds the screen boundaries."""
     return (center.x - radius < 0 or 
             center.x + radius > WIDTH or 
             center.y - radius < 0 or 
             center.y + radius > HEIGHT)
 
 def circlecast_hits_any_rect(p0, p1, radius, rects, step=6.0, ignore_start=False):
-    """Return True if the swept circle between p0 and p1 hits any rect in the list or the screen bounds."""
-    # Check if the corridor goes outside the screen boundaries
+    """Return True if the swept circle between p0 and p1 intersects screen bounds or any obstacle."""
     d = p1 - p0
     length = d.length()
     if length == 0:
@@ -93,7 +78,6 @@ def circlecast_hits_any_rect(p0, p1, radius, rects, step=6.0, ignore_start=False
             if circle_outside_bounds(pos, radius):
                 return True
 
-    # Check rectangular obstacles
     for r in rects:
         if segment_circlecast_hits_rect(p0, p1, radius, r, step, ignore_start):
             return True
@@ -101,8 +85,8 @@ def circlecast_hits_any_rect(p0, p1, radius, rects, step=6.0, ignore_start=False
 
 def has_line_of_sight(p0, p1, rects, ray_radius=3.0):
     """
-    Return True if there is an unobstructed line of sight between p0 and p1.
-    Returns False if any obstacle rectangle blocks the direct vision path.
+    Return True if an unobstructed line of sight exists between p0 and p1.
+    Returns False if any obstacle rectangle blocks the vision ray.
     """
     for r in rects:
         if segment_circlecast_hits_rect(p0, p1, ray_radius, r, step=4.0, ignore_start=True):
@@ -111,10 +95,8 @@ def has_line_of_sight(p0, p1, rects, ray_radius=3.0):
 
 def find_corridor_gaps(rects, max_gap_width=120, min_gap_width=42):
     """
-    Detect narrow gaps (corridors) between pairs of obstacle rectangles.
-    Checks facing edges for both horizontal and vertical gaps.
+    Detect narrow passage corridors between obstacle rectangle pairs.
     Returns a list of (gap_midpoint_V2, gap_direction_V2, gap_width) tuples.
-    gap_direction indicates the traversal axis through the corridor.
     """
     gaps = []
     n = len(rects)
@@ -122,20 +104,18 @@ def find_corridor_gaps(rects, max_gap_width=120, min_gap_width=42):
         for j in range(i + 1, n):
             A, B = rects[i], rects[j]
 
-            # --- Vertical gap (A above B): corridor runs top-to-bottom ---
+            # Vertical gap (A above B): corridor runs top-to-bottom
             if A.bottom < B.top:
                 gap_w = B.top - A.bottom
                 if min_gap_width <= gap_w <= max_gap_width:
-                    # Require horizontal overlap between the two rects
                     ol = max(A.left, B.left)
                     or_ = min(A.right, B.right)
                     if or_ > ol:
                         mid = V2((ol + or_) / 2, (A.bottom + B.top) / 2)
-                        # Ensure gap midpoint is not inside a third obstacle
                         if not any(rects[k].collidepoint(mid.x, mid.y) for k in range(n) if k != i and k != j):
                             gaps.append((mid, V2(0, 1), gap_w))
 
-            # --- Vertical gap (B above A) ---
+            # Vertical gap (B above A)
             if B.bottom < A.top:
                 gap_w = A.top - B.bottom
                 if min_gap_width <= gap_w <= max_gap_width:
@@ -146,7 +126,7 @@ def find_corridor_gaps(rects, max_gap_width=120, min_gap_width=42):
                         if not any(rects[k].collidepoint(mid.x, mid.y) for k in range(n) if k != i and k != j):
                             gaps.append((mid, V2(0, 1), gap_w))
 
-            # --- Horizontal gap (A left of B): corridor runs left-to-right ---
+            # Horizontal gap (A left of B): corridor runs left-to-right
             if A.right < B.left:
                 gap_w = B.left - A.right
                 if min_gap_width <= gap_w <= max_gap_width:
@@ -157,7 +137,7 @@ def find_corridor_gaps(rects, max_gap_width=120, min_gap_width=42):
                         if not any(rects[k].collidepoint(mid.x, mid.y) for k in range(n) if k != i and k != j):
                             gaps.append((mid, V2(1, 0), gap_w))
 
-            # --- Horizontal gap (B left of A) ---
+            # Horizontal gap (B left of A)
             if B.right < A.left:
                 gap_w = A.left - B.right
                 if min_gap_width <= gap_w <= max_gap_width:
@@ -172,8 +152,8 @@ def find_corridor_gaps(rects, max_gap_width=120, min_gap_width=42):
 
 def ray_screen_edge_intersection(origin, direction, margin=26):
     """
-    Calculate the boundary coordinate where a ray from origin along direction
-    hits the screen viewport rectangle [margin, margin, WIDTH - margin, HEIGHT - margin].
+    Calculate the viewport boundary intersection point for a ray starting at origin along direction.
+    Clamps the point to [margin, margin, WIDTH - margin, HEIGHT - margin].
     """
     if direction.length_squared() == 0:
         return V2(origin)

@@ -1,31 +1,17 @@
-# ============================================================================
-# main.py
-# Purpose
-#   Entry point and game loop. Handles input, updates agents, and draws frames.
-# Mental model
-#   Each frame: measure dt, process input, update world and agents, draw UI.
-#   Agents do not draw themselves until update is finished for the frame.
-# Controls
-#   Left click sets a target for the frog. Space shoots a bubble. R restarts.
-# ============================================================================
-
-import sys, random
+import sys, random, math
 import pygame
 from settings import *
-from utils import draw_grid, circle_rect_intersect
+from utils import draw_grid, circle_rect_intersect, has_line_of_sight, ray_screen_edge_intersection
 from world import World
 from entities.frog import Frog
 from entities.fly import Fly
 from entities.snake import Snake, SnakeState
-
 from vfx import VFXManager
-from utils import has_line_of_sight, ray_screen_edge_intersection
-import math
 
 def draw_threat_indicators(surf, frog, snakes, obstacles):
     """
     Render tactical screen-edge warning chevrons pointing toward Aggro snakes
-    that are currently off-screen or obscured behind tree obstacles.
+    that are currently off-screen or obscured behind obstacle rectangles.
     """
     for s in snakes:
         if s.state == SnakeState.Aggro:
@@ -39,7 +25,6 @@ def draw_threat_indicators(surf, frog, snakes, obstacles):
                     continue
                 edge_pos = ray_screen_edge_intersection(frog.pos, d_vec, margin=24)
 
-                # Pulse rate accelerates as snake gets closer
                 pulse_speed = 0.012 + max(0.0, (380 - dist) * 0.00004)
                 t = pygame.time.get_ticks() * pulse_speed
                 size = 11.0 + math.sin(t) * 3.5
@@ -52,12 +37,11 @@ def draw_threat_indicators(surf, frog, snakes, obstacles):
                 p2 = edge_pos - fwd * (size * 0.7) + perp * (size * 0.7)
                 p3 = edge_pos - fwd * (size * 0.7) - perp * (size * 0.7)
 
-                # Render glowing red threat chevron arrow
                 pygame.draw.polygon(surf, (255, 50, 50), [(int(p1.x), int(p1.y)), (int(p2.x), int(p2.y)), (int(p3.x), int(p3.y))])
                 pygame.draw.polygon(surf, (255, 220, 220), [(int(p1.x), int(p1.y)), (int(p2.x), int(p2.y)), (int(p3.x), int(p3.y))], 1)
 
 def create_vignette_surface(w, h):
-    """Pre-render a smooth radial vignette overlay surface with dark red/black edges."""
+    """Pre-render a radial vignette overlay surface for edge darkening and danger feedback."""
     v_surf = pygame.Surface((w, h), pygame.SRCALPHA)
     max_rings = 48
     for i in range(max_rings):
@@ -68,39 +52,27 @@ def create_vignette_surface(w, h):
     return v_surf
 
 def main():
-    # Initialize Pygame and create a window and a clock
     pygame.init()
     pygame.display.set_caption("Frog, Flies, and Snakes")
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     clock = pygame.time.Clock()
 
-    # Fonts for text and overlay
     font = pygame.font.SysFont("consolas", 22)
     bigfont = pygame.font.SysFont("consolas", 48, bold=True)
     small_font = pygame.font.SysFont("consolas", 18, bold=True)
 
-    # VFX Manager
     vfx = VFXManager(font=small_font)
-
-    # Main render surface for screen shake
     render_surf = pygame.Surface((WIDTH, HEIGHT))
-
-    # Pre-render vignette overlay surface
     vignette_surf = create_vignette_surface(WIDTH, HEIGHT)
 
     def reset():
-        """
-        Create a fresh world and agents. Called at start and when the player restarts.
-        Returns a tuple of (world, frog, flies, snakes).
-        """
+        """Create a fresh world scene and entity instances."""
         world = World(WIDTH, HEIGHT)
         frog = Frog((WIDTH * 0.5, HEIGHT * 0.5))
 
-        # Randomly scatter flies inside the world bounds
         flies = [Fly((random.randint(60, WIDTH - 60), random.randint(60, HEIGHT - 60)))
                  for _ in range(NUM_FLIES)]
 
-        # Create snakes with patrol points mirrored across the screen
         snakes = []
         for i in range(NUM_SNAKES):
             px = 180 + i * 280
@@ -110,10 +82,8 @@ def main():
 
         return world, frog, flies, snakes
 
-    # Build initial state
     world, frog, flies, snakes = reset()
 
-    # Game state for health, scoring, timer, and endings
     health = START_HEALTH
     fly_count = 0
     game_over = False
@@ -125,11 +95,8 @@ def main():
 
     running = True
     while running:
-        # ---------------- Measure dt ----------------
-        # Convert milliseconds to seconds for frame rate independent movement
         dt = clock.tick(FPS) / 1000.0
 
-        # ---------------- Input ----------------
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
                 running = False
@@ -139,19 +106,15 @@ def main():
                     running = False
 
                 if e.key == pygame.K_v:
-                    # Toggle AI debug visualization overlay
                     debug_mode = not debug_mode
 
                 if e.key == pygame.K_p:
-                    # Toggle game pause modal
                     paused = not paused
 
                 if not game_over and not paused and e.key == pygame.K_SPACE:
-                    # Space shoots a bubble from the frog mouth
                     frog.shoot()
 
                 if (game_over or paused) and e.key == pygame.K_r:
-                    # R restarts the whole scene
                     world, frog, flies, snakes = reset()
                     health = START_HEALTH
                     fly_count = 0
@@ -162,26 +125,21 @@ def main():
                     vfx.reset_combo()
 
             if not game_over and not paused and e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
-                # Left click sets a new move target for the frog
                 frog.set_target(pygame.mouse.get_pos())
 
-        # ---------------- Update ----------------
         if not paused:
             vfx.update(dt)
 
         if not game_over and not paused:
             elapsed_time += dt
 
-            # Update frog first since other agents may query frog position
             frog.update(dt, vfx)
 
-            # Update flies and check if any fly gets caught by the frog
             current_time = pygame.time.get_ticks() / 1000.0
             eaten = []
             for f in flies:
                 f.update(dt, flies, frog, world.rect, frog.bubbles, vfx)
 
-                # Eat a fly when close enough to the frog center
                 if (f.pos - frog.pos).length_squared() <= (f.radius + FROG_RADIUS) ** 2:
                     vfx.add_eat_fly(f.pos, current_time=current_time)
                     f.trigger_swarm_alarm(flies, vfx)
@@ -195,14 +153,10 @@ def main():
             for f in eaten:
                 flies.remove(f)
 
-            # Update snakes and their FSM decisions
             for s in snakes:
                 s.update(dt, frog, vfx)
 
-            # ------------- Bubble hit logic -------------
-            # For each bubble and snake pair, if they overlap:
-            #   - pop the bubble
-            #   - if the snake is Aggro, switch it to Harmless or Confused
+            # Bubble collision logic
             for s in snakes:
                 for b in frog.bubbles:
                     if b.alive and (b.pos - s.pos).length_squared() <= (BUBBLE_RADIUS + s.radius) ** 2:
@@ -211,7 +165,6 @@ def main():
                         vfx.add_bubble_pop(b.pos)
                         b.alive = False
 
-            # Check bubble collisions with static obstacles (boxes)
             for b in frog.bubbles:
                 if b.alive:
                     for r in world.obstacles:
@@ -220,10 +173,7 @@ def main():
                             b.alive = False
                             break
 
-            # ------------- Damage logic -------------
-            # Only Aggro snakes should damage the frog.
-            # Use frog.can_be_hurt() to avoid multiple hits in a row.
-            # After a hit, reduce health and optionally pacify the snake.
+            # Player damage logic
             for s in snakes:
                 if s.state == SnakeState.Aggro and (s.pos - frog.pos).length_squared() <= (s.radius + FROG_RADIUS) ** 2:
                     if frog.can_be_hurt():
@@ -235,25 +185,23 @@ def main():
                             game_over = True
                             win = False
 
-        # ---------------- Draw ----------------
-        render_surf.fill(BG)           # clear background
-        draw_grid(render_surf)         # draw a soft grid
-        world.draw(render_surf)        # draw obstacles
+        # Rendering pass
+        render_surf.fill(BG)
+        draw_grid(render_surf)
+        world.draw(render_surf)
 
-        # Tactical overlay (Target destination marker)
         frog.draw_target_marker(render_surf)
 
-        for f in flies:                # draw flies
+        for f in flies:
             f.draw(render_surf)
-        for s in snakes:               # draw snakes
+        for s in snakes:
             s.draw(render_surf)
-        frog.draw(render_surf)         # draw frog and bubbles
-        vfx.draw(render_surf)          # draw particles and floating text
+        frog.draw(render_surf)
+        vfx.draw(render_surf)
 
-        # Tactical off-screen/obscured threat warning indicators
         draw_threat_indicators(render_surf, frog, snakes, world.obstacles)
 
-        # Dynamic Vignette & Danger Screen Tint
+        # Danger vignette screen tint
         aggro_dists = [(s.pos - frog.pos).length() for s in snakes if s.state == SnakeState.Aggro]
         min_aggro_dist = min(aggro_dists) if aggro_dists else 9999.0
 
@@ -269,7 +217,7 @@ def main():
             vignette_surf.set_alpha(vignette_alpha)
             render_surf.blit(vignette_surf, (0, 0))
 
-        # ---------------- AI Debug Visualization Overlay ----------------
+        # Debug visualization pass
         if debug_mode:
             frog.draw_debug(render_surf, small_font)
             for f in flies:
@@ -277,11 +225,10 @@ def main():
             for s in snakes:
                 s.draw_debug(render_surf, small_font)
 
-            # Debug status badge in top right
             dbg_badge = small_font.render("[DEBUG MODE: ON (V)]", True, (60, 240, 120))
             render_surf.blit(dbg_badge, (WIDTH - dbg_badge.get_width() - 16, 16))
 
-        # Draw hearts for health
+        # Health UI
         for i in range(START_HEALTH):
             cx = 16 + i * 26
             cy = 18
@@ -291,13 +238,13 @@ def main():
             points = [(cx - 6, cy + 2), (cx + 18, cy + 2), (cx + 6, cy + 18)]
             pygame.draw.polygon(render_surf, col, points)
 
-        # Draw fly counter and control hint
+        # Fly count UI and controls
         txt = font.render(f"Flies: {fly_count}/{FLIES_TO_WIN}", True, (240, 240, 240))
         render_surf.blit(txt, (16, 42))
         tips = font.render("Click: move | Space: bubble | P: Pause | V: Debug | R: restart", True, MUTED)
         render_surf.blit(tips, (16, 68))
 
-        # Render Speedrun Timer (Top Center)
+        # Timer UI
         mins = int(elapsed_time // 60)
         secs = elapsed_time % 60
         timer_str = f"TIME: {mins:02d}:{secs:04.1f}s"
@@ -311,7 +258,7 @@ def main():
             best_txt = font.render(best_str, True, (255, 220, 90))
             render_surf.blit(best_txt, (WIDTH // 2 + timer_txt.get_width() // 2 + 20, 16))
 
-        # Pause Overlay Modal
+        # Pause modal overlay
         if paused and not game_over:
             p_shade = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             p_shade.fill((0, 0, 0, 175))
@@ -326,11 +273,11 @@ def main():
             render_surf.blit(title, title.get_rect(center=(WIDTH // 2, card_rect.top + 45)))
 
             controls_info = [
-                "• Left Click : Set Frog Move Target (Arrive)",
+                "• Left Click : Set Frog Move Target",
                 "• Space Bar  : Shoot Bubble Projectile",
                 "• Key 'P'    : Resume Gameplay",
                 "• Key 'V'    : Toggle AI Debug Overlay",
-                "• Key 'R'    : Restart Simulation",
+                "• Key 'R'    : Restart Game",
             ]
             for idx, line_str in enumerate(controls_info):
                 line_txt = small_font.render(line_str, True, (220, 230, 240))
@@ -339,7 +286,7 @@ def main():
             resume_hint = font.render("Press P to resume", True, (100, 240, 160))
             render_surf.blit(resume_hint, resume_hint.get_rect(center=(WIDTH // 2, card_rect.bottom - 35)))
 
-        # If game over, dim the screen and show a message
+        # Game over screen
         if game_over:
             shade = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             shade.fill((0, 0, 0, 160))
@@ -351,7 +298,6 @@ def main():
             rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 20))
             render_surf.blit(text, rect)
 
-            # Show final completion time & best time on win screen
             if win:
                 win_time_str = f"Time: {mins:02d}:{secs:04.1f}s"
                 if best_time is not None and elapsed_time <= best_time:
@@ -362,13 +308,12 @@ def main():
             else:
                 render_surf.blit(hint, hint.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 35)))
 
-        # Present the frame with screen shake offset
+        # Screen shake output
         ox, oy = vfx.get_shake_offset()
         screen.fill((0, 0, 0))
         screen.blit(render_surf, (int(ox), int(oy)))
         pygame.display.flip()
 
-    # Clean shutdown
     pygame.quit()
     sys.exit(0)
 

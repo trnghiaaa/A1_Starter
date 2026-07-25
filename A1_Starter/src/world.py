@@ -1,28 +1,14 @@
-# ============================================================================
-# world.py
-# Purpose
-#   Build the arena and a list of rectangular obstacles.
-#   Obstacles are static and are used by the snake for avoidance checks.
-# Why rectangles
-#   Rectangles are easy to draw and fast to test against with our helpers.
-# ============================================================================
-
 import random
 import pygame
 
 class World:
     def __init__(self, width, height):
-        # Whole world bounds as a pygame.Rect for convenience
         self.rect = pygame.Rect(0, 0, width, height)
-
-        # Container that holds all blocking rectangles
         self.obstacles = []
-
-        # Build a reproducible obstacle set
         self._build_obstacles(width, height)
 
     def _build_obstacles(self, w, h):
-        """Create a few rectangles with a fixed random seed for reproducibility."""
+        """Create a fixed set of obstacle rectangles using a seeded random generator."""
         rng = random.Random(9)
         for _ in range(9):
             ww = rng.randint(80, 180)
@@ -33,9 +19,8 @@ class World:
             self.obstacles.append(rect)
 
     def draw(self, surf):
-        """Render each obstacle with a fill, safety buffer outline, and a subtle edge."""
+        """Render each obstacle rectangle with safety buffer outline and styled borders."""
         for r in self.obstacles:
-            # Translucent obstacle safety clearance buffer outline
             buf_r = r.inflate(14, 14)
             b_surf = pygame.Surface((buf_r.width + 4, buf_r.height + 4), pygame.SRCALPHA)
             b_rect = pygame.Rect(2, 2, buf_r.width, buf_r.height)

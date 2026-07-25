@@ -1,19 +1,10 @@
-# ============================================================================
-# settings.py
-# Purpose
-#   Central place for all constants and tuning values.
-#   You can tweak speeds, radii, and counts here without touching logic.
-# Reading guide
-#   Each variable has a short note so you know what it controls.
-# ============================================================================
-
 # Window size in pixels
 WIDTH, HEIGHT = 1080, 720
 
 # Target frames per second for the game loop
 FPS = 60
 
-# Colors as RGB tuples. Used by drawing code for the UI and agents.
+# Colors as RGB tuples used for UI and entities
 BG    = (28, 33, 38)     # background color
 WHITE = (240, 240, 240)  # text and highlights
 GREEN = (90, 220, 120)   # frog color
@@ -23,55 +14,53 @@ PURPLE= (185, 120, 250)  # fly color when fleeing
 RED   = (232, 88, 88)    # health hearts
 MUTED = (180, 188, 196)  # hint text
 
-# Frog setup
-FROG_RADIUS = 16          # draw size and collision size for the frog
-FROG_SPEED  = 200.0       # top speed for the frog in pixels per second
-HURT_INVULN = 1.0         # seconds of temporary invulnerability after damage
+# Frog configuration
+FROG_RADIUS = 16          # draw size and collision radius for the frog
+FROG_SPEED  = 200.0       # max movement speed in pixels per second
+HURT_INVULN = 1.0         # seconds of temporary invulnerability after taking damage
 
-# Bubble setup
-BUBBLE_RADIUS   = 8       # visual radius and collision radius
-BUBBLE_SPEED    = 380.0   # how fast the bubble travels
-BUBBLE_LIFETIME = 2.0     # seconds before the bubble pops automatically
+# Bubble configuration
+BUBBLE_RADIUS   = 8       # visual and collision radius
+BUBBLE_SPEED    = 380.0   # projectile velocity
+BUBBLE_LIFETIME = 2.0     # lifetime in seconds before popping
 
-# Fly setup
-NUM_FLIES = 18            # how many flies spawn
-FLY_RADIUS = 8            # fly draw and collision radius
-FLY_SPEED  = 120.0        # fly max speed
+# Fly configuration
+NUM_FLIES = 18            # initial fly count
+FLY_RADIUS = 8            # fly collision radius
+FLY_SPEED  = 120.0        # fly top movement speed
 
-# Boids neighborhood and weights
-# These determine how flies react to neighbors
-NEIGHBOR_RADIUS = 120.0   # how far a fly considers other flies as neighbors
+# Flocking weights and perception radii
+NEIGHBOR_RADIUS = 120.0   # perception radius for neighbor detection
 SEP_RADIUS      = 50.0    # separation threshold distance
-SEP_WEIGHT      = 1.9     # weight for separation force when flocking
-FLEE_SEP_WEIGHT = 0.5     # weight for separation force when fleeing (prioritizes evade)
-COH_WEIGHT      = 0.9     # weight for cohesion force
-ALI_WEIGHT      = 0.8     # weight for alignment force
-ANCHOR_WEIGHT   = 0.6     # small pull to arena center to keep flock on screen
+SEP_WEIGHT      = 1.9     # separation weight during flocking
+FLEE_SEP_WEIGHT = 0.5     # separation weight during fleeing
+COH_WEIGHT      = 0.9     # cohesion weight
+ALI_WEIGHT      = 0.8     # alignment weight
+ANCHOR_WEIGHT   = 0.6     # arena center attraction force weight
 
-# Arrive behavior
-# Slow inside slow radius and stop inside stop radius
+# Arrive behavior tuning
 ARRIVE_SLOW_RADIUS = 120.0
 ARRIVE_STOP_RADIUS = 8.0
 
-# Snake setup
+# Snake configuration
 NUM_SNAKES  = 3
 SNAKE_RADIUS = 18
 SNAKE_SPEED  = 160.0
 
-# Snake perception ranges for FSM transitions
-AGGRO_RANGE   = 260.0     # start chasing when frog gets this close
-DEAGGRO_RANGE = 360.0     # stop chasing when frog moves this far
+# Snake state transition ranges
+AGGRO_RANGE   = 260.0     # chase range threshold
+DEAGGRO_RANGE = 360.0     # de-aggro distance threshold
 
-# Obstacle avoidance tuning
-AVOID_LOOKAHEAD       = 260.0   # how far the snake looks ahead when checking a corridor
-AVOID_ANGLE_INCREMENT = 12      # degrees to rotate per step when searching for a free path
-AVOID_MAX_ANGLE       = 84      # maximum deviation to try on either side
+# Obstacle avoidance parameters
+AVOID_LOOKAHEAD       = 260.0   # forward raycast distance
+AVOID_ANGLE_INCREMENT = 12      # angular increment per corridor probe
+AVOID_MAX_ANGLE       = 84      # maximum scan angle deviation
 
-# Gap corridor navigation tuning
-GAP_MAX_WIDTH       = 120        # max pixel gap between obstacle edges to count as a corridor
-GAP_MIN_WIDTH       = 42         # min gap width (snake must fit through: ~2 * SNAKE_RADIUS)
-GAP_APPROACH_RADIUS = 60.0       # distance at which snake switches from arrive to threading
+# Gap corridor navigation parameters
+GAP_MAX_WIDTH       = 120        # max gap width between obstacle pairs
+GAP_MIN_WIDTH       = 42         # min gap width to navigate through
+GAP_APPROACH_RADIUS = 60.0       # approach threshold before committing through gap
 
-# Game rules
-START_HEALTH = 3                 # how many hits the frog can take
-FLIES_TO_WIN = 10                # win condition counter
+# Gameplay rules
+START_HEALTH = 3                 # initial player health
+FLIES_TO_WIN = 10                # objective target count

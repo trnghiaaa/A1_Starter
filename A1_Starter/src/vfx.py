@@ -1,9 +1,3 @@
-# ============================================================================
-# vfx.py
-# Purpose
-#   Particle visual effects system, floating text popups, and screen shake.
-# ============================================================================
-
 import random, math
 import pygame
 from pygame.math import Vector2 as V2
@@ -28,7 +22,7 @@ class Particle:
             return
         
         self.pos += self.vel * dt
-        self.vel *= 0.92  # Air drag
+        self.vel *= 0.92  # Air drag factor
 
         if self.shrink:
             progress = max(0.0, self.lifetime / self.max_lifetime)
@@ -38,7 +32,6 @@ class Particle:
         if not self.alive or self.radius <= 0.5:
             return
         progress = max(0.0, min(1.0, self.lifetime / self.max_lifetime))
-        # Smooth alpha fade using power curve
         alpha = int(255 * (progress ** 0.6)) if self.fade else 255
         
         r = int(self.radius)
@@ -50,7 +43,7 @@ class Particle:
 
 
 class RippleParticle:
-    """Soft expanding, fading translucent water ring particle for agent movement trails."""
+    """Soft expanding translucent water ring particle for agent movement trails."""
     def __init__(self, pos, start_radius=6.0, max_radius=20.0, color=(140, 200, 240), lifetime=0.5):
         self.pos = V2(pos)
         self.radius = start_radius
@@ -67,7 +60,6 @@ class RippleParticle:
             self.alive = False
             return
         linear_progress = 1.0 - (self.lifetime / self.max_lifetime)
-        # Fluid ease-out expansion: starts quick, then gently coast to max_radius
         ease_progress = 1.0 - (1.0 - linear_progress) ** 2
         self.radius = self.start_radius + (self.max_radius - self.start_radius) * ease_progress
 
@@ -75,7 +67,6 @@ class RippleParticle:
         if not self.alive:
             return
         progress = max(0.0, min(1.0, self.lifetime / self.max_lifetime))
-        # Smooth fading transparency
         alpha = int(130 * (progress ** 0.7))
         r = int(self.radius)
         if r < 2: return
@@ -100,7 +91,7 @@ class FloatingText:
         if self.lifetime <= 0:
             self.alive = False
             return
-        self.pos.y -= 40.0 * dt  # Float upwards
+        self.pos.y -= 40.0 * dt
 
     def draw(self, surf):
         if not self.alive or not self.font:
@@ -119,10 +110,9 @@ class VFXManager:
         self.floating_texts = []
         self.screen_shake = 0.0
         self.font = font
-        # Combo tracking
         self.combo_count = 0
         self.last_eat_time = -999.0
-        self.combo_window = 1.5  # seconds within which consecutive catches form a combo
+        self.combo_window = 1.5
 
     def reset_combo(self):
         """Reset fly catch combo multiplier."""
@@ -154,7 +144,7 @@ class VFXManager:
             ft.draw(surf)
 
     def add_water_ripple(self, pos, radius=8.0, max_radius=20.0, color=(140, 200, 240)):
-        """Spawns an expanding fading water ripple particle at pos."""
+        """Spawn expanding water ripple particle at pos."""
         self.ripples.append(RippleParticle(pos, start_radius=radius, max_radius=max_radius, color=color))
 
     def trigger_shake(self, duration=0.25):
@@ -177,14 +167,12 @@ class VFXManager:
             self.particles.append(Particle(pos, vel, color, radius, lifetime))
 
     def add_eat_fly(self, pos, current_time=0.0):
-        # Update combo status
         if current_time - self.last_eat_time <= self.combo_window:
             self.combo_count += 1
         else:
             self.combo_count = 1
         self.last_eat_time = current_time
 
-        # Floating text feedback
         if self.font:
             if self.combo_count >= 2:
                 msg = f"{self.combo_count}x COMBO!"
@@ -194,7 +182,6 @@ class VFXManager:
             else:
                 self.floating_texts.append(FloatingText(pos, "+1", color=(255, 240, 100), font=self.font))
 
-        # Particle burst scaled by combo level
         particle_count = 8 + min(12, (self.combo_count - 1) * 6)
         for _ in range(particle_count):
             angle = random.uniform(0, math.pi * 2)
@@ -229,7 +216,7 @@ class VFXManager:
             self.particles.append(Particle(pos, vel, color, radius, lifetime))
 
     def add_aggro_hiss(self, pos):
-        """Spawns alert hiss particles when snake detects the frog and enters Aggro state."""
+        """Spawn alert hiss particles when snake detects frog."""
         for _ in range(9):
             angle = random.uniform(0, math.pi * 2)
             spd = random.uniform(50, 190)
@@ -240,7 +227,7 @@ class VFXManager:
             self.particles.append(Particle(pos, vel, color, radius, lifetime))
 
     def add_landing_splash(self, pos):
-        """Spawns a water droplet splash burst and expanding water ring when frog finishes landing."""
+        """Spawn water splash particles and expanding water ring when frog lands."""
         self.add_water_ripple(pos, radius=10.0, max_radius=30.0, color=(140, 230, 255))
         for _ in range(8):
             angle = random.uniform(0, math.pi * 2)
@@ -252,5 +239,5 @@ class VFXManager:
             self.particles.append(Particle(pos, vel, color, radius, lifetime))
 
     def add_swarm_alarm_pulse(self, pos, radius=110.0):
-        """Spawns a translucent purple expanding perception ring particle for fly swarm alarm waves."""
+        """Spawn perception alarm wave ripple when fly swarm is alerted."""
         self.ripples.append(RippleParticle(pos, start_radius=10.0, max_radius=radius, color=(210, 140, 255), lifetime=0.36))
