@@ -83,15 +83,25 @@ class Frog:
         return self.hurt_timer <= 0
 
     def update(self, dt, vfx=None):
-        # Compute steering with Arrive
-        steer = arrive(self.pos, self.vel, self.target, self.speed)
+        dist_to_target = (self.target - self.pos).length()
+        if dist_to_target <= ARRIVE_STOP_RADIUS:
+            self.pos = V2(self.target)
+            self.vel = V2()
+            steer = V2()
+        else:
+            # Compute steering with Arrive
+            steer = arrive(self.pos, self.vel, self.target, self.speed, dt=dt)
+            # Integrate velocity with dt and clamp to max speed
+            self.vel = integrate_velocity(self.vel, steer, dt, self.speed)
+            # Move the frog
+            self.pos += self.vel * dt
+
+            # If frog reached target in this step, snap to target and zero velocity
+            if (self.target - self.pos).length() <= ARRIVE_STOP_RADIUS:
+                self.pos = V2(self.target)
+                self.vel = V2()
+
         self.last_steer = V2(steer)
-
-        # Integrate velocity with dt and clamp to max speed
-        self.vel = integrate_velocity(self.vel, steer, dt, self.speed)
-
-        # Move the frog
-        self.pos += self.vel * dt
 
         is_moving = self.vel.length_squared() > 400
         # Trigger splash droplets when landing at move target

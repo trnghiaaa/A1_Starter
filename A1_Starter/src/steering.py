@@ -44,28 +44,34 @@ def flee(pos, vel, target, max_speed):
     desired = d.normalize() * max_speed
     return desired - vel
 
-def arrive(pos, vel, target, max_speed, slow_radius=ARRIVE_SLOW_RADIUS, stop_radius=ARRIVE_STOP_RADIUS):
+def arrive(pos, vel, target, max_speed, slow_radius=ARRIVE_SLOW_RADIUS, stop_radius=ARRIVE_STOP_RADIUS, dt=0.016):
     """
-    Like seek when far, but slow down near the target.
-    Rules
-      If distance < stop_radius, return a force that cancels leftover velocity
-      If distance < slow_radius, scale desired speed by distance / slow_radius
-      Otherwise use full speed
-    This should remove overshoot and jitter around the target.
+    Like seek when far, but slow down with kinematic square-root deceleration near target.
+    Rules:
+      If distance <= stop_radius, return a force that cancels leftover velocity (-vel / dt).
+      If distance < slow_radius, use sqrt deceleration (v = sqrt(2*a*d)) and braking gain to stop cleanly at target.
+      Otherwise use full speed.
     """
     d = target - pos
     dist = d.length()
-    # Inside stop radius: brake to zero
-    if dist < stop_radius:
-        return -vel
-    # Inside slow radius: linearly scale speed down
+    # Inside stop radius: brake to zero completely within current frame
+    if dist <= stop_radius:
+        return -vel / max(dt, 1e-4)
+
+    # Inside slow radius: kinematic square-root speed reduction down to 0 at stop_radius
     if dist < slow_radius:
-        desired = d.normalize() * max_speed * (dist / slow_radius)
+        # Progress ratio (0.0 at stop_radius, 1.0 at slow_radius)
+        t = max(0.0, min(1.0, (dist - stop_radius) / max(1.0, slow_radius - stop_radius)))
+        # Square-root deceleration curve matching physical braking (v = sqrt(2*a*d))
+        speed_factor = math.sqrt(t)
+        desired = d.normalize() * max_speed * speed_factor
+        # Apply 3.5x braking gain so velocity decelerates fast enough to prevent overshoot
+        return (desired - vel) * 3.5
     else:
         desired = d.normalize() * max_speed
-    return desired - vel
+        return desired - vel
 
-def integrate_velocity(vel, force, dt, max_speed, max_force=500.0):
+def integrate_velocity(vel, force, dt, max_speed, max_force=2000.0):
     """
     Apply a steering force to velocity using Euler integration.
     Then clamp to max speed and return the new velocity.
